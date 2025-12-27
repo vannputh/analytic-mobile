@@ -108,3 +108,4 @@ function mapOMDBTypeToMedium(omdbType: string): string {
   return typeMap[omdbType.toLowerCase()] || 'Movie'
 }
 
+
