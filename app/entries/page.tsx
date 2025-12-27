@@ -66,6 +66,7 @@ export default function EntriesPage() {
   const [loading, setLoading] = useState(true)
   const [initialLoading, setInitialLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [loadingAll, setLoadingAll] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<FilterState>(defaultFilterState)
   const [searchQuery, setSearchQuery] = useState("")
@@ -304,6 +305,41 @@ export default function EntriesPage() {
     }
   }
 
+  const handleLoadAll = async () => {
+    try {
+      setLoadingAll(true)
+      
+      // Load all remaining entries
+      const result = await getEntries({
+        getCount: true
+      })
+
+      if (!result.success) {
+        throw new Error(result.error || "Failed to load all entries")
+      }
+
+      if (result.data && result.data.length > 0) {
+        setAllEntries(result.data)
+        setDisplayedCount(result.data.length)
+        setHasMoreEntries(false)
+        
+        if (result.count !== null && result.count !== undefined) {
+          setTotalCount(result.count)
+        }
+        
+        toast.success(`Loaded all ${result.data.length} entries`)
+      } else {
+        setHasMoreEntries(false)
+        toast.info("All entries already loaded")
+      }
+    } catch (err) {
+      console.error("Failed to load all entries:", err)
+      toast.error(err instanceof Error ? err.message : "Failed to load all entries")
+    } finally {
+      setLoadingAll(false)
+    }
+  }
+
   // Extract filter options from ALL data (not just displayed)
   const filterOptions = useMemo(() => extractFilterOptions(allEntries), [allEntries])
 
@@ -364,7 +400,10 @@ export default function EntriesPage() {
   }, [allFilteredEntries, displayedCount, isFiltered])
 
   const handleEdit = (entry: MediaEntry) => {
-    router.push(`/add?id=${entry.id}`)
+    // Preserve current URL with all filters and search params
+    const currentUrl = window.location.pathname + window.location.search
+    const returnTo = encodeURIComponent(currentUrl)
+    router.push(`/add?id=${entry.id}&returnTo=${returnTo}`)
   }
 
   const handleDelete = async (id: string) => {
@@ -530,23 +569,41 @@ export default function EntriesPage() {
               onDelete={handleDelete}
               showSelectMode={showSelectMode}
               onSelectModeChange={setShowSelectMode}
+              onEntryUpdate={(updatedEntry) => {
+                // Update the entry in the allEntries array without full reload
+                setAllEntries(prev => 
+                  prev.map(entry => entry.id === updatedEntry.id ? updatedEntry : entry)
+                )
+              }}
               onRefresh={async () => {
                 setLoading(true)
                 try {
-                  const result = await getEntries({
-                    limit: ITEMS_PER_PAGE,
-                    offset: 0,
-                    getCount: true
-                  })
+                  // Preserve current filter/search state when refreshing
+                  const result = isFiltered 
+                    ? await getEntries({ getCount: true })
+                    : await getEntries({
+                        limit: ITEMS_PER_PAGE,
+                        offset: 0,
+                        getCount: true
+                      })
                   if (!result.success) {
                     throw new Error(result.error || "Failed to refresh entries")
                   }
                   const loadedEntries = result.data || []
                   setAllEntries(loadedEntries)
-                  setDisplayedCount(ITEMS_PER_PAGE)
+                  
+                  if (isFiltered) {
+                    setDisplayedCount(loadedEntries.length)
+                    setHasMoreEntries(false)
+                  } else {
+                    setDisplayedCount(ITEMS_PER_PAGE)
+                    if (result.count !== null && result.count !== undefined) {
+                      setHasMoreEntries(ITEMS_PER_PAGE < result.count)
+                    }
+                  }
+                  
                   if (result.count !== null && result.count !== undefined) {
                     setTotalCount(result.count)
-                    setHasMoreEntries(ITEMS_PER_PAGE < result.count)
                   }
                 } catch (err) {
                   console.error("Failed to refresh entries:", err)
@@ -556,14 +613,14 @@ export default function EntriesPage() {
                 }
               }}
             />
-            {/* Load More Button - only show if not filtering/searching and there might be more */}
+            {/* Load More and Load All Buttons - only show if not filtering/searching and there might be more */}
             {!isFiltered && 
              hasMoreEntries && 
              filteredEntries.length === displayedCount && (
-              <div className="flex justify-center mt-6">
+              <div className="flex justify-center gap-3 mt-6">
                 <Button
                   onClick={handleLoadMore}
-                  disabled={loadingMore}
+                  disabled={loadingMore || loadingAll}
                   variant="outline"
                   className="gap-2"
                 >
@@ -575,6 +632,23 @@ export default function EntriesPage() {
                   ) : (
                     <>
                       Load More {totalCount !== null ? `(${allEntries.length} of ${totalCount})` : `(${allEntries.length} loaded)`}
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={handleLoadAll}
+                  disabled={loadingMore || loadingAll}
+                  variant="outline"
+                  className="gap-2"
+                >
+                  {loadingAll ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading All...
+                    </>
+                  ) : (
+                    <>
+                      Load All {totalCount !== null ? `(${totalCount} total)` : ""}
                     </>
                   )}
                 </Button>

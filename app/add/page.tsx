@@ -248,7 +248,9 @@ export default function AddPage() {
         const result = await updateEntry(entryId, entryData)
         if (result.success) {
           toast.success("Entry updated successfully")
-          router.push("/entries")
+          // Use returnTo URL if provided, otherwise default to /entries
+          const returnTo = searchParams.get("returnTo")
+          router.push(returnTo || "/entries")
         } else {
           toast.error(result.error || "Failed to update entry")
         }

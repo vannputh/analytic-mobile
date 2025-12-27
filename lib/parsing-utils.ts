@@ -181,6 +181,50 @@ export function formatDuration(minutes: number): string {
 }
 
 /**
+ * Format length string to standardized display format.
+ * Converts durations to "XXhr XXmin" format, keeps pages as-is.
+ */
+export function formatLength(length: string | null | undefined): string | null {
+  if (!length) return null
+
+  const str = length.trim()
+
+  // Check if it's pages (contains "page", "pg", or "p" as a unit)
+  if (/\d+\s*(pages?|pg|p)\b/i.test(str)) {
+    return str // Keep pages as-is
+  }
+
+  // Check if it's a plain number > 500 (likely pages)
+  const plainNumberMatch = str.match(/^(\d+)$/)
+  if (plainNumberMatch) {
+    const num = parseInt(plainNumberMatch[1], 10)
+    if (num > 500) {
+      return str // Likely pages, keep as-is
+    }
+  }
+
+  // Parse as duration and format
+  const minutes = parseDurationToMinutes(length)
+  if (minutes === null) {
+    return str // If we can't parse it, return original
+  }
+
+  // Format as "XXhr XXmin"
+  if (minutes < 60) {
+    return `${minutes}min`
+  }
+
+  const hours = Math.floor(minutes / 60)
+  const mins = minutes % 60
+
+  if (mins === 0) {
+    return `${hours}hr`
+  }
+
+  return `${hours}hr ${mins}min`
+}
+
+/**
  * Format number with locale-specific separators
  */
 export function formatNumber(num: number, decimals = 0): string {

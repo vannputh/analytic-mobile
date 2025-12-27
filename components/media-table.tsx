@@ -4,6 +4,7 @@ import { useState, useMemo, useEffect } from "react";
 import { SafeImage } from "@/components/ui/safe-image";
 import { MediaEntry } from "@/lib/database.types";
 import { getPlaceholderPoster, formatDate } from "@/lib/types";
+import { formatLength } from "@/lib/parsing-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +46,7 @@ import {
 } from "@/components/ui/select";
 import { TYPE_OPTIONS, STATUS_OPTIONS, MEDIUM_OPTIONS } from "@/lib/types";
 import { StatusHistoryDialog } from "@/components/status-history-dialog";
+import { EditEntryDialog } from "@/components/edit-entry-dialog";
 import { restartEntry } from "@/lib/actions";
 import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -55,6 +57,7 @@ interface MediaTableProps {
   onEdit?: (entry: MediaEntry) => void;
   onDelete?: (id: string) => void;
   onRefresh?: () => void;
+  onEntryUpdate?: (updatedEntry: MediaEntry) => void;
   showSelectMode?: boolean;
   onSelectModeChange?: (show: boolean) => void;
   columnPicker?: React.ReactNode;
@@ -124,7 +127,7 @@ export const COLUMN_DEFINITIONS: Record<ColumnKey, { label: string; defaultVisib
   finish_date: { label: "Finish Date", defaultVisible: true },
 };
 
-export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMode = false, onSelectModeChange }: MediaTableProps) {
+export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate, showSelectMode = false, onSelectModeChange }: MediaTableProps) {
   const [sortColumn, setSortColumn] = useState<SortColumn>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
   // Initialize with defaults - will be loaded from Supabase in useEffect
@@ -154,6 +157,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
   const [isBatchEditing, setIsBatchEditing] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedEntryForHistory, setSelectedEntryForHistory] = useState<MediaEntry | null>(null);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [selectedEntryForEdit, setSelectedEntryForEdit] = useState<MediaEntry | null>(null);
 
   // Load column visibility from Supabase
   useEffect(() => {
@@ -1030,7 +1035,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
                   )}
                   {visibleColumns.has("length") && (
                     <TableCell className="text-sm">
-                      {entry.length || <span className="text-muted-foreground">N/A</span>}
+                      {formatLength(entry.length) || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("language") && (
@@ -1092,7 +1097,11 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
                           Select
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onClick={() => onEdit?.(entry)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedEntryForEdit(entry);
+                            setEditDialogOpen(true);
+                          }}
                           className="cursor-pointer"
                         >
                           <Pencil className="h-4 w-4 mr-2" />
@@ -1311,6 +1320,21 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
           }}
         />
       )}
+
+      <EditEntryDialog
+        entry={selectedEntryForEdit}
+        open={editDialogOpen}
+        onOpenChange={(open) => {
+          setEditDialogOpen(open);
+          if (!open) {
+            setSelectedEntryForEdit(null);
+          }
+        }}
+        onSuccess={(updatedEntry) => {
+          // Update the entry in place without full refresh
+          onEntryUpdate?.(updatedEntry);
+        }}
+      />
     </div>
   );
 }
