@@ -304,19 +304,14 @@ export default function EntriesPage() {
     }
   }
 
-  // Get displayed entries (paginated when not filtered)
-  const entries = useMemo(() => {
-    return allEntries.slice(0, displayedCount)
-  }, [allEntries, displayedCount])
+  // Extract filter options from ALL data (not just displayed)
+  const filterOptions = useMemo(() => extractFilterOptions(allEntries), [allEntries])
 
-  // Extract filter options from raw data
-  const filterOptions = useMemo(() => extractFilterOptions(entries), [entries])
+  // Apply filters to ALL entries (not just displayed ones)
+  const filterFilteredEntries = useMemo(() => applyFilters(allEntries, filters), [allEntries, filters])
 
-  // Apply filters to entries
-  const filterFilteredEntries = useMemo(() => applyFilters(entries, filters), [entries, filters])
-
-  // Apply search filter
-  const filteredEntries = useMemo(() => {
+  // Apply search filter to ALL filtered entries
+  const allFilteredEntries = useMemo(() => {
     if (!searchQuery.trim()) return filterFilteredEntries
 
     const query = searchQuery.toLowerCase().trim()
@@ -356,6 +351,17 @@ export default function EntriesPage() {
       return false
     })
   }, [filterFilteredEntries, searchQuery])
+
+  // Get displayed entries (paginated when not filtered)
+  const filteredEntries = useMemo(() => {
+    // When filtered, show all filtered entries
+    // When not filtered, paginate the entries
+    if (isFiltered) {
+      return allFilteredEntries
+    } else {
+      return allFilteredEntries.slice(0, displayedCount)
+    }
+  }, [allFilteredEntries, displayedCount, isFiltered])
 
   const handleEdit = (entry: MediaEntry) => {
     router.push(`/add?id=${entry.id}`)
@@ -553,7 +559,7 @@ export default function EntriesPage() {
             {/* Load More Button - only show if not filtering/searching and there might be more */}
             {!isFiltered && 
              hasMoreEntries && 
-             filteredEntries.length === entries.length && (
+             filteredEntries.length === displayedCount && (
               <div className="flex justify-center mt-6">
                 <Button
                   onClick={handleLoadMore}

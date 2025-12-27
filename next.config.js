@@ -15,6 +15,15 @@ const nextConfig = {
         protocol: 'https',
         hostname: 'www.imdb.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'books.google.com',
+      },
+      {
+        protocol: 'https',
+        hostname: '*.supabase.co',
+        pathname: '/storage/v1/object/public/**',
+      },
     ],
   },
 }

@@ -360,6 +360,22 @@ export default function ImportPage() {
         try {
           // Build URL with title and season if provided
           let url = `/api/metadata?title=${encodeURIComponent(entry.title.trim())}`
+          
+          // Pass medium parameter for books (Google Books API)
+          if (entry.medium === "Book") {
+            url += `&medium=${encodeURIComponent(entry.medium)}`
+          } else if (entry.medium) {
+            // Map medium values to OMDB type for movies and TV shows
+            const typeMap: Record<string, string> = {
+              "Movie": "movie",
+              "TV Show": "series",
+            }
+            const omdbType = typeMap[entry.medium]
+            if (omdbType) {
+              url += `&type=${omdbType}`
+            }
+          }
+          
           if (entry.season) {
             url += `&season=${encodeURIComponent(entry.season)}`
           }

@@ -1,10 +1,47 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Component, ReactNode } from "react";
 import Image, { ImageProps } from "next/image";
 
 interface SafeImageProps extends ImageProps {
     fallbackElement?: React.ReactNode;
+}
+
+interface ErrorBoundaryState {
+    hasError: boolean;
+}
+
+class ImageErrorBoundary extends Component<
+    { children: ReactNode; onError: () => void; fallback: ReactNode },
+    ErrorBoundaryState
+> {
+    constructor(props: { children: ReactNode; onError: () => void; fallback: ReactNode }) {
+        super(props);
+        this.state = { hasError: false };
+    }
+
+    static getDerivedStateFromError() {
+        return { hasError: true };
+    }
+
+    componentDidCatch(error: Error) {
+        console.warn("SafeImage error boundary caught:", error);
+        this.props.onError();
+    }
+
+    componentDidUpdate(prevProps: { children: ReactNode }) {
+        // Reset error state when src changes
+        if (prevProps.children !== this.props.children && this.state.hasError) {
+            this.setState({ hasError: false });
+        }
+    }
+
+    render() {
+        if (this.state.hasError) {
+            return <>{this.props.fallback}</>;
+        }
+        return this.props.children;
+    }
 }
 
 export function SafeImage({
@@ -19,16 +56,22 @@ export function SafeImage({
         setError(false);
     }, [src]);
 
-    if (error || !src || src === "N/A") {
+    // Handle invalid sources
+    if (!src || src === "N/A" || error) {
         return <>{fallbackElement}</>;
     }
 
     return (
-        <Image
-            src={src}
-            alt={alt}
+        <ImageErrorBoundary
             onError={() => setError(true)}
-            {...props}
-        />
+            fallback={fallbackElement}
+        >
+            <Image
+                src={src}
+                alt={alt}
+                onError={() => setError(true)}
+                {...props}
+            />
+        </ImageErrorBoundary>
     );
 }

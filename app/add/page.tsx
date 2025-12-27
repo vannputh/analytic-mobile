@@ -16,8 +16,9 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
-import { ArrowLeft, Loader2, Save, Download } from "lucide-react"
+import { ArrowLeft, Loader2, Save, Download, Upload, X } from "lucide-react"
 import { toast } from "sonner"
+import { SafeImage } from "@/components/ui/safe-image"
 import { differenceInDays, parseISO, isValid } from "date-fns"
 
 export default function AddPage() {
@@ -28,6 +29,7 @@ export default function AddPage() {
   const [loading, setLoading] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [fetchingMetadata, setFetchingMetadata] = useState(false)
+  const [uploadingImage, setUploadingImage] = useState(false)
   const [genreInput, setGenreInput] = useState("")
   const [languageInput, setLanguageInput] = useState("")
   const [dropdownOptions, setDropdownOptions] = useState<{
@@ -289,27 +291,133 @@ export default function AddPage() {
     setFormData({ ...formData, language: languages.length > 0 ? languages : null })
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please select an image file')
+      return
+    }
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('File size must be less than 10MB')
+      return
+    }
+
+    setUploadingImage(true)
+
+    try {
+      const uploadFormData = new FormData()
+      uploadFormData.append('file', file)
+      // Pass title if available for naming the file
+      if (formData.title && formData.title.trim()) {
+        uploadFormData.append('title', formData.title.trim())
+      }
+
+      const response = await fetch('/api/upload', {
+        method: 'POST',
+        body: uploadFormData,
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to upload image')
+      }
+
+      if (data.success && data.url) {
+        setFormData((prev) => ({ ...prev, poster_url: data.url }))
+        toast.success('Image uploaded successfully')
+      } else {
+        throw new Error('Invalid response from server')
+      }
+    } catch (error) {
+      console.error('Error uploading image:', error)
+      toast.error(error instanceof Error ? error.message : 'Failed to upload image')
+    } finally {
+      setUploadingImage(false)
+      // Reset file input
+      e.target.value = ''
+    }
+  }
+
+  // Helper function to detect if a string is an ISBN
+  const detectISBN = (input: string | null | undefined): string | null => {
+    if (!input) return null
+    // Remove all non-alphanumeric characters (keep digits and X)
+    const cleaned = input.trim().replace(/[^0-9X]/g, '')
+    
+    // Check for ISBN-13 (13 digits, starting with 978 or 979)
+    if (/^(978|979)\d{10}$/.test(cleaned)) {
+      return cleaned
+    }
+    
+    // Check for ISBN-10 (10 digits, may end with X)
+    if (/^\d{9}[\dX]$/.test(cleaned)) {
+      return cleaned
+    }
+    
+    return null
+  }
+
+  // Helper function to detect if a string is an IMDb ID
+  const detectIMDbID = (input: string | null | undefined): boolean => {
+    if (!input) return false
+    const trimmed = input.trim()
+    // IMDb IDs start with "tt" followed by 7-8 digits
+    return /^tt\d{7,8}$/i.test(trimmed)
+  }
+
   const handleFetchMetadata = async () => {
-    if (!formData.title?.trim()) {
-      toast.error("Please enter a title first")
+    // Check if ISBN or IMDb ID is provided in imdb_id field
+    const isbn = detectISBN(formData.imdb_id)
+    const isImdbId = detectIMDbID(formData.imdb_id)
+    const hasTitle = formData.title?.trim()
+    
+    if (!hasTitle && !isbn && !isImdbId) {
+      toast.error("Please enter a title, ISBN, or IMDb ID first")
       return
     }
 
     setFetchingMetadata(true)
     try {
-      // Build URL with title and optional parameters
-      let url = `/api/metadata?title=${encodeURIComponent(formData.title.trim())}`
+      // Build URL with search query and optional parameters
+      let url = ""
+      
+      if (isbn || isImdbId) {
+        // If ISBN or IMDb ID is provided, pass it as imdb_id parameter
+        url = `/api/metadata?imdb_id=${encodeURIComponent(formData.imdb_id!.trim())}`
+        
+        // Also pass title if available (for fallback or additional context)
+        if (hasTitle) {
+          url += `&title=${encodeURIComponent(formData.title.trim())}`
+        }
+      } else {
+        // Use title for search
+        url = `/api/metadata?title=${encodeURIComponent(formData.title!.trim())}`
+      }
       
       if (formData.medium) {
-        // Map our medium values to OMDB type
-        const typeMap: Record<string, string> = {
-          "Movie": "movie",
-          "TV Show": "series",
+        // Pass medium parameter for books (Google Books API)
+        if (formData.medium === "Book") {
+          url += `&medium=${encodeURIComponent(formData.medium)}`
+        } else {
+          // Map our medium values to OMDB type for movies and TV shows
+          const typeMap: Record<string, string> = {
+            "Movie": "movie",
+            "TV Show": "series",
+          }
+          const omdbType = typeMap[formData.medium]
+          if (omdbType) {
+            url += `&type=${omdbType}`
+          }
         }
-        const omdbType = typeMap[formData.medium]
-        if (omdbType) {
-          url += `&type=${omdbType}`
-        }
+      } else if (isbn) {
+        // If ISBN is detected but medium not set, auto-set to Book
+        url += `&medium=Book`
       }
       
       if (formData.season) {
@@ -327,8 +435,17 @@ export default function AddPage() {
 
       // Update form data with fetched metadata (overwrites existing values)
       // Note: season and type are not overwritten - they use user input to fetch appropriate metadata
-      const fetchedGenres = metadata.genre ? metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean) : []
-      const fetchedLanguages = metadata.language ? metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean) : []
+      // Handle genre as array or string (for backward compatibility)
+      const fetchedGenres = metadata.genre 
+        ? (Array.isArray(metadata.genre) 
+            ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
+            : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
+        : []
+      const fetchedLanguages = metadata.language 
+        ? (Array.isArray(metadata.language)
+            ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
+            : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
+        : []
       
       setFormData((prev) => {
         // Merge existing genres with fetched genres (avoid duplicates, case-insensitive)
@@ -359,6 +476,7 @@ export default function AddPage() {
         
         return {
           ...prev,
+          title: metadata.title || prev.title, // Update title from metadata (works for ISBN and IMDb ID)
           poster_url: metadata.poster_url || prev.poster_url,
           genre: mergedGenres.length > 0 ? mergedGenres : null,
           language: mergedLanguages.length > 0 ? mergedLanguages : null,
@@ -427,7 +545,7 @@ export default function AddPage() {
                 type="button"
                 variant="outline"
                 onClick={handleFetchMetadata}
-                disabled={fetchingMetadata || !formData.title?.trim()}
+                disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
               >
                 {fetchingMetadata ? (
                   <>
@@ -459,7 +577,12 @@ export default function AddPage() {
                     placeholder="Enter new medium"
                     onBlur={() => {
                       if (newValue.medium.trim()) {
-                        setFormData({ ...formData, medium: newValue.medium.trim() })
+                        const trimmedValue = newValue.medium.trim()
+                        setFormData({ ...formData, medium: trimmedValue })
+                        setDropdownOptions(prev => ({
+                          ...prev,
+                          mediums: prev.mediums.includes(trimmedValue) ? prev.mediums : [...prev.mediums, trimmedValue]
+                        }))
                         setShowNewInput({ ...showNewInput, medium: false })
                         setNewValue({ ...newValue, medium: "" })
                       } else {
@@ -514,7 +637,12 @@ export default function AddPage() {
                     placeholder="Enter new status"
                     onBlur={() => {
                       if (newValue.status.trim()) {
-                        setFormData({ ...formData, status: newValue.status.trim() })
+                        const trimmedValue = newValue.status.trim()
+                        setFormData({ ...formData, status: trimmedValue })
+                        setDropdownOptions(prev => ({
+                          ...prev,
+                          statuses: prev.statuses.includes(trimmedValue) ? prev.statuses : [...prev.statuses, trimmedValue]
+                        }))
                         setShowNewInput({ ...showNewInput, status: false })
                         setNewValue({ ...newValue, status: "" })
                       } else {
@@ -572,7 +700,12 @@ export default function AddPage() {
                     placeholder="Enter new type"
                     onBlur={() => {
                       if (newValue.type.trim()) {
-                        setFormData({ ...formData, type: newValue.type.trim() })
+                        const trimmedValue = newValue.type.trim()
+                        setFormData({ ...formData, type: trimmedValue })
+                        setDropdownOptions(prev => ({
+                          ...prev,
+                          types: prev.types.includes(trimmedValue) ? prev.types : [...prev.types, trimmedValue]
+                        }))
                         setShowNewInput({ ...showNewInput, type: false })
                         setNewValue({ ...newValue, type: "" })
                       } else {
@@ -667,7 +800,12 @@ export default function AddPage() {
                     placeholder="Enter new platform"
                     onBlur={() => {
                       if (newValue.platform.trim()) {
-                        setFormData({ ...formData, platform: newValue.platform.trim() })
+                        const trimmedValue = newValue.platform.trim()
+                        setFormData({ ...formData, platform: trimmedValue })
+                        setDropdownOptions(prev => ({
+                          ...prev,
+                          platforms: prev.platforms.includes(trimmedValue) ? prev.platforms : [...prev.platforms, trimmedValue]
+                        }))
                         setShowNewInput({ ...showNewInput, platform: false })
                         setNewValue({ ...newValue, platform: "" })
                       } else {
@@ -849,13 +987,23 @@ export default function AddPage() {
 
             <div className="space-y-2">
               <Label htmlFor="imdb_id" className="text-sm font-mono">
-                IMDb ID
+                IMDb ID / ISBN
               </Label>
               <Input
                 id="imdb_id"
                 value={formData.imdb_id || ""}
-                onChange={(e) => setFormData({ ...formData, imdb_id: e.target.value })}
-                placeholder="tt1234567"
+                onChange={(e) => {
+                  const value = e.target.value
+                  const isbn = detectISBN(value)
+                  
+                  // Auto-set medium to "Book" if ISBN is detected
+                  if (isbn) {
+                    setFormData({ ...formData, imdb_id: value, medium: "Book" })
+                  } else {
+                    setFormData({ ...formData, imdb_id: value })
+                  }
+                }}
+                placeholder="tt1234567 or 9780123456789"
               />
             </div>
 
@@ -863,13 +1011,67 @@ export default function AddPage() {
               <Label htmlFor="poster_url" className="text-sm font-mono">
                 Poster URL
               </Label>
-              <Input
-                id="poster_url"
-                type="url"
-                value={formData.poster_url || ""}
-                onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
-                placeholder="https://..."
-              />
+              <div className="flex gap-2">
+                <Input
+                  id="poster_url"
+                  type="url"
+                  value={formData.poster_url || ""}
+                  onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
+                  placeholder="https://..."
+                  className="flex-1"
+                />
+                <input
+                  type="file"
+                  id="image-upload"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={handleImageUpload}
+                  disabled={uploadingImage}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => document.getElementById('image-upload')?.click()}
+                  disabled={uploadingImage}
+                  className="gap-2"
+                >
+                  {uploadingImage ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      <Upload className="h-4 w-4" />
+                      Upload
+                    </>
+                  )}
+                </Button>
+              </div>
+              {formData.poster_url && (
+                <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
+                  <SafeImage
+                    src={formData.poster_url}
+                    alt="Poster preview"
+                    fill
+                    className="object-contain"
+                    fallbackElement={
+                      <div className="flex items-center justify-center h-full text-muted-foreground">
+                        Invalid image URL
+                      </div>
+                    }
+                  />
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2 h-8 w-8"
+                    onClick={() => setFormData({ ...formData, poster_url: null })}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
