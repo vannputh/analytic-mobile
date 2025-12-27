@@ -35,6 +35,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -46,6 +47,8 @@ import { TYPE_OPTIONS, STATUS_OPTIONS, MEDIUM_OPTIONS } from "@/lib/types";
 import { StatusHistoryDialog } from "@/components/status-history-dialog";
 import { restartEntry } from "@/lib/actions";
 import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator";
 
 interface MediaTableProps {
   entries: MediaEntry[];
@@ -143,7 +146,12 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
     type: "",
     status: "",
     medium: "",
+    price: "",
+    language: "",
+    episodes: "",
+    genre: "",
   });
+  const [isBatchEditing, setIsBatchEditing] = useState(false);
   const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
   const [selectedEntryForHistory, setSelectedEntryForHistory] = useState<MediaEntry | null>(null);
 
@@ -200,6 +208,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
       case "Dropped":
         return "bg-red-500/10 text-red-500 border-red-500/20";
+      case "Plan to Watch":
+        return "bg-purple-500/10 text-purple-500 border-purple-500/20";
       default:
         return "";
     }
@@ -365,7 +375,9 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
             if (meta.genre && !entry.genre) {
               updateData.genre = Array.isArray(meta.genre) ? meta.genre : meta.genre.split(",").map((g: string) => g.trim()).filter(Boolean);
             }
-            if (meta.language && !entry.language) updateData.language = meta.language;
+            if (meta.language && !entry.language) {
+              updateData.language = Array.isArray(meta.language) ? meta.language : meta.language.split(",").map((l: string) => l.trim()).filter(Boolean);
+            }
             if (meta.average_rating && !entry.average_rating) updateData.average_rating = meta.average_rating;
             if (meta.length && !entry.length) updateData.length = meta.length;
             if (meta.episodes && !entry.episodes) updateData.episodes = meta.episodes;
@@ -442,28 +454,139 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
     if (batchEditData.type && batchEditData.type !== "no-change") updateData.type = batchEditData.type;
     if (batchEditData.status && batchEditData.status !== "no-change") updateData.status = batchEditData.status;
     if (batchEditData.medium && batchEditData.medium !== "no-change") updateData.medium = batchEditData.medium;
+    
+    // Handle price: empty string means keep current, any value means update
+    if (batchEditData.price !== "" && batchEditData.price !== "no-change") {
+      const priceValue = parseFloat(batchEditData.price);
+      if (!isNaN(priceValue) && priceValue >= 0) {
+        updateData.price = priceValue;
+      }
+    }
+    
+    // Handle language: parse comma-separated languages (like genre)
+    if (batchEditData.language !== "" && batchEditData.language !== "no-change") {
+      const languages = batchEditData.language
+        .split(",")
+        .map((l) => l.trim())
+        .filter((l) => l.length > 0);
+      updateData.language = languages.length > 0 ? languages : null;
+    }
+    
+    // Handle episodes: empty string means keep current, any value means update
+    if (batchEditData.episodes !== "" && batchEditData.episodes !== "no-change") {
+      const episodesValue = parseInt(batchEditData.episodes);
+      if (!isNaN(episodesValue) && episodesValue >= 0) {
+        updateData.episodes = episodesValue;
+      }
+    }
 
-    if (Object.keys(updateData).length === 0) {
+    // Handle genre: parse comma-separated genres and merge with existing
+    let genresToAdd: string[] = [];
+    if (batchEditData.genre && batchEditData.genre.trim() !== "") {
+      genresToAdd = batchEditData.genre
+        .split(",")
+        .map((g) => g.trim())
+        .filter((g) => g.length > 0);
+    }
+
+    // If we have genres to add, we need to update each entry individually to merge genres
+    const hasGenreUpdate = genresToAdd.length > 0;
+    const hasOtherUpdates = Object.keys(updateData).length > 0;
+
+    if (!hasGenreUpdate && !hasOtherUpdates) {
       toast.error("Please select at least one field to update");
       return;
     }
 
+    setIsBatchEditing(true);
     try {
-      const { error } = await supabase
-        .from("media_entries")
-        .update(updateData)
-        .in("id", Array.from(selectedEntries));
+      if (hasGenreUpdate) {
+        // Update each entry individually to merge genres
+        let successCount = 0;
+        let failedCount = 0;
 
-      if (error) throw error;
+        for (const entry of entriesToEdit) {
+          try {
+            // Preserve original case of existing genres
+            const currentGenres = Array.isArray(entry.genre) 
+              ? entry.genre.map((g) => g.trim()).filter((g) => g.length > 0)
+              : entry.genre 
+                ? [entry.genre.trim()]
+                : [];
 
-      toast.success(`Updated ${selectedEntries.size} entries`);
-      setBatchEditOpen(false);
-      setBatchEditData({ type: "", status: "", medium: "" });
+            // Create a map of lowercase -> original case for existing genres
+            const existingGenreMap = new Map<string, string>();
+            currentGenres.forEach((g) => {
+              existingGenreMap.set(g.toLowerCase(), g);
+            });
+
+            // Add new genres, checking for duplicates (case-insensitive)
+            const mergedGenres = [...currentGenres];
+            genresToAdd.forEach((newGenre) => {
+              const normalized = newGenre.toLowerCase();
+              if (!existingGenreMap.has(normalized)) {
+                mergedGenres.push(newGenre);
+                existingGenreMap.set(normalized, newGenre);
+              }
+            });
+
+            const entryUpdateData: Partial<MediaEntry> = { ...updateData, genre: mergedGenres };
+
+            const { error } = await supabase
+              .from("media_entries")
+              .update(entryUpdateData)
+              .eq("id", entry.id);
+
+            if (error) throw error;
+            successCount++;
+          } catch (err) {
+            console.error(`Failed to update entry ${entry.id}:`, err);
+            failedCount++;
+          }
+        }
+
+        if (successCount > 0) {
+          toast.success(`Updated ${successCount} entries${failedCount > 0 ? `, ${failedCount} failed` : ""}`);
+        }
+        if (failedCount > 0 && successCount === 0) {
+          toast.error(`Failed to update ${failedCount} entries`);
+        }
+      } else {
+        // No genre update, use batch update for other fields
+        const { error } = await supabase
+          .from("media_entries")
+          .update(updateData)
+          .in("id", Array.from(selectedEntries));
+
+        if (error) throw error;
+
+        toast.success(`Updated ${selectedEntries.size} entries`);
+      }
+
+      // Reset state and close dialog
+      setBatchEditData({ type: "", status: "", medium: "", price: "", language: "", episodes: "", genre: "" });
       setSelectedEntries(new Set());
       onRefresh?.();
+      
+      // Close dialog after a brief delay to ensure state updates
+      setTimeout(() => {
+        setBatchEditOpen(false);
+        setIsBatchEditing(false);
+      }, 100);
     } catch (error) {
       console.error("Batch edit error:", error);
       toast.error("Failed to update entries");
+      setIsBatchEditing(false);
+    }
+  }
+
+  const handleBatchEditDialogChange = (open: boolean) => {
+    if (!isBatchEditing) {
+      setBatchEditOpen(open);
+      if (!open) {
+        // Reset form when closing
+        setBatchEditData({ type: "", status: "", medium: "", price: "", language: "", episodes: "", genre: "" });
+      }
     }
   }
 
@@ -896,7 +1019,9 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
                   )}
                   {visibleColumns.has("language") && (
                     <TableCell className="text-sm">
-                      {entry.language || <span className="text-muted-foreground">N/A</span>}
+                      {entry.language && Array.isArray(entry.language)
+                        ? entry.language.join(", ")
+                        : (typeof entry.language === 'string' && entry.language) ? entry.language : <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("price") && (
@@ -986,70 +1111,172 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, showSelectMod
       </div>
 
       {/* Batch Edit Dialog */}
-      <Dialog open={batchEditOpen} onOpenChange={setBatchEditOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Batch Edit {selectedEntries.size} Entries</DialogTitle>
+      <Dialog open={batchEditOpen} onOpenChange={handleBatchEditDialogChange}>
+        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0">
+          <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4">
+            <DialogTitle className="text-xl">Batch Edit {selectedEntries.size} Entries</DialogTitle>
             <DialogDescription>
-              Update the selected fields for all selected entries. Leave fields empty to keep current values.
+              Update the selected fields for all selected entries. Leave fields empty or select "Keep current" to preserve existing values.
             </DialogDescription>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="batch-type">Type</Label>
-              <Select value={batchEditData.type} onValueChange={(value) => setBatchEditData(prev => ({ ...prev, type: value }))}>
-                <SelectTrigger id="batch-type">
-                  <SelectValue placeholder="Keep current" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no-change">Keep current</SelectItem>
-                  {TYPE_OPTIONS.map((t) => (
-                    <SelectItem key={t} value={t}>
-                      {t}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="batch-status">Status</Label>
-              <Select value={batchEditData.status} onValueChange={(value) => setBatchEditData(prev => ({ ...prev, status: value }))}>
-                <SelectTrigger id="batch-status">
-                  <SelectValue placeholder="Keep current" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no-change">Keep current</SelectItem>
-                  {STATUS_OPTIONS.map((s) => (
-                    <SelectItem key={s} value={s}>
-                      {s}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="batch-medium">Medium</Label>
-              <Select value={batchEditData.medium} onValueChange={(value) => setBatchEditData(prev => ({ ...prev, medium: value }))}>
-                <SelectTrigger id="batch-medium">
-                  <SelectValue placeholder="Keep current" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="no-change">Keep current</SelectItem>
-                  {MEDIUM_OPTIONS.map((m) => (
-                    <SelectItem key={m} value={m}>
-                      {m}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+          
+          <div className="flex-1 overflow-y-auto px-6 min-h-0">
+            <div className="space-y-6 py-4">
+              {/* Basic Information Section */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Basic Information</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-type">Type</Label>
+                      <Select 
+                        value={batchEditData.type} 
+                        onValueChange={(value) => setBatchEditData(prev => ({ ...prev, type: value }))}
+                        disabled={isBatchEditing}
+                      >
+                        <SelectTrigger id="batch-type">
+                          <SelectValue placeholder="Keep current" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="no-change">Keep current</SelectItem>
+                          {TYPE_OPTIONS.map((t) => (
+                            <SelectItem key={t} value={t}>
+                              {t}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-status">Status</Label>
+                      <Select 
+                        value={batchEditData.status} 
+                        onValueChange={(value) => setBatchEditData(prev => ({ ...prev, status: value }))}
+                        disabled={isBatchEditing}
+                      >
+                        <SelectTrigger id="batch-status">
+                          <SelectValue placeholder="Keep current" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="no-change">Keep current</SelectItem>
+                          {STATUS_OPTIONS.map((s) => (
+                            <SelectItem key={s} value={s}>
+                              {s}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-medium">Medium</Label>
+                      <Select 
+                        value={batchEditData.medium} 
+                        onValueChange={(value) => setBatchEditData(prev => ({ ...prev, medium: value }))}
+                        disabled={isBatchEditing}
+                      >
+                        <SelectTrigger id="batch-medium">
+                          <SelectValue placeholder="Keep current" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="no-change">Keep current</SelectItem>
+                          {MEDIUM_OPTIONS.map((m) => (
+                            <SelectItem key={m} value={m}>
+                              {m}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Details Section */}
+              <div className="space-y-4">
+                <div>
+                  <h3 className="text-sm font-semibold mb-3">Details</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-price">Price</Label>
+                      <Input
+                        id="batch-price"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        placeholder="Keep current (leave empty)"
+                        value={batchEditData.price}
+                        onChange={(e) => setBatchEditData(prev => ({ ...prev, price: e.target.value }))}
+                        disabled={isBatchEditing}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="batch-episodes">Number of Episodes</Label>
+                      <Input
+                        id="batch-episodes"
+                        type="number"
+                        min="0"
+                        placeholder="Keep current (leave empty)"
+                        value={batchEditData.episodes}
+                        onChange={(e) => setBatchEditData(prev => ({ ...prev, episodes: e.target.value }))}
+                        disabled={isBatchEditing}
+                      />
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="batch-language">Language</Label>
+                      <Input
+                        id="batch-language"
+                        type="text"
+                        placeholder="Comma-separated (e.g., English, Spanish) - leave empty to keep current"
+                        value={batchEditData.language}
+                        onChange={(e) => setBatchEditData(prev => ({ ...prev, language: e.target.value }))}
+                        disabled={isBatchEditing}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Separate multiple languages with commas
+                      </p>
+                    </div>
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="batch-genre">Genre</Label>
+                      <Input
+                        id="batch-genre"
+                        type="text"
+                        placeholder="Comma-separated (e.g., Action, Drama) - leave empty to keep current"
+                        value={batchEditData.genre}
+                        onChange={(e) => setBatchEditData(prev => ({ ...prev, genre: e.target.value }))}
+                        disabled={isBatchEditing}
+                      />
+                      <p className="text-xs text-muted-foreground">
+                        Genres will be added to existing genres, not replaced
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setBatchEditOpen(false)}>
+
+          <DialogFooter className="flex-shrink-0 px-6 pb-6 pt-4 border-t">
+            <Button 
+              variant="outline" 
+              onClick={() => handleBatchEditDialogChange(false)}
+              disabled={isBatchEditing}
+            >
               Cancel
             </Button>
-            <Button onClick={batchEdit}>
-              Update {selectedEntries.size} Entries
+            <Button 
+              onClick={batchEdit}
+              disabled={isBatchEditing}
+            >
+              {isBatchEditing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Updating...
+                </>
+              ) : (
+                `Update ${selectedEntries.size} Entries`
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

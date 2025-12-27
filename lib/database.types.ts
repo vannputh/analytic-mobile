@@ -23,7 +23,7 @@ export type Database = {
           genre: string[] | null
           id: string
           imdb_id: string | null
-          language: string | null
+          language: string[] | null
           length: string | null
           medium: string | null
           my_rating: number | null
@@ -47,7 +47,7 @@ export type Database = {
           genre?: string[] | null
           id?: string
           imdb_id?: string | null
-          language?: string | null
+          language?: string[] | null
           length?: string | null
           medium?: string | null
           my_rating?: number | null
@@ -71,7 +71,7 @@ export type Database = {
           genre?: string[] | null
           id?: string
           imdb_id?: string | null
-          language?: string | null
+          language?: string[] | null
           length?: string | null
           medium?: string | null
           my_rating?: number | null

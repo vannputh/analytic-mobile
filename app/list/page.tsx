@@ -21,6 +21,8 @@ export default function ListPage() {
   const [viewMode, setViewMode] = useState<"table" | "grid">("table");
   const [showSelectMode, setShowSelectMode] = useState(false);
   const isInitialized = useRef(false);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isUpdatingFromState = useRef(false);
 
   // Filter states - initialize from URL params
   const [search, setSearch] = useState("");
@@ -32,6 +34,12 @@ export default function ListPage() {
 
   // Initialize filters from URL params on mount
   useEffect(() => {
+    // Don't sync back if we're the ones updating the URL
+    if (isUpdatingFromState.current) {
+      isUpdatingFromState.current = false;
+      return;
+    }
+
     const searchParam = searchParams.get("search") || "";
     const typeParam = searchParams.get("type") || "all";
     const statusParam = searchParams.get("status") || "all";
@@ -49,12 +57,15 @@ export default function ListPage() {
   }, [searchParams]);
 
   // Update URL params when filters change (but not on initial load)
+  // Separate effect for non-search filters (immediate update)
   useEffect(() => {
     if (!isInitialized.current) return;
 
     const params = new URLSearchParams();
 
-    if (search) params.set("search", search);
+    // Include current search from URL, but don't trigger on search changes
+    const currentSearch = searchParams.get("search") || "";
+    if (currentSearch) params.set("search", currentSearch);
     if (type !== "all") params.set("type", type);
     if (status !== "all") params.set("status", status);
     if (platform !== "all") params.set("platform", platform);
@@ -62,8 +73,51 @@ export default function ListPage() {
     if (genre !== "all") params.set("genre", genre);
 
     const newUrl = params.toString() ? `/list?${params.toString()}` : "/list";
+    isUpdatingFromState.current = true;
     router.replace(newUrl, { scroll: false });
-  }, [search, type, status, platform, medium, genre, router]);
+  }, [type, status, platform, medium, genre, router, searchParams]);
+
+  // Debounce URL updates for search query to prevent page refresh on every keystroke
+  useEffect(() => {
+    if (!isInitialized.current) return;
+
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Set new timeout to update URL after user stops typing
+    // Capture current filter values in closure
+    const currentSearch = search;
+    const currentType = type;
+    const currentStatus = status;
+    const currentPlatform = platform;
+    const currentMedium = medium;
+    const currentGenre = genre;
+
+    searchTimeoutRef.current = setTimeout(() => {
+      const params = new URLSearchParams();
+
+      if (currentSearch) params.set("search", currentSearch);
+      if (currentType !== "all") params.set("type", currentType);
+      if (currentStatus !== "all") params.set("status", currentStatus);
+      if (currentPlatform !== "all") params.set("platform", currentPlatform);
+      if (currentMedium !== "all") params.set("medium", currentMedium);
+      if (currentGenre !== "all") params.set("genre", currentGenre);
+
+      const newUrl = params.toString() ? `/list?${params.toString()}` : "/list";
+      isUpdatingFromState.current = true;
+      router.replace(newUrl, { scroll: false });
+    }, 300); // 300ms debounce
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]); // Only trigger on search changes, but capture other filter values
 
   // Fetch entries
   useEffect(() => {

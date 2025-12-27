@@ -197,7 +197,8 @@ export default function ImportPage() {
             title: row.title || "",
             type: row.type || null,
             season: formattedSeason,
-            language: row.language || null,
+            language: row.language && Array.isArray(row.language) ? row.language : 
+                      row.language ? row.language.split(",").map((l: string) => l.trim()).filter(Boolean) : null,
             status: row.status || null,
             my_rating: parsedMyRating,
             rating: row.rating ?? null,
@@ -374,7 +375,7 @@ export default function ImportPage() {
             // Update entry with fetched metadata (only if field is empty)
             if (meta.type && !entry.type) updatedData[i].type = meta.type
             if (meta.genre && !entry.genre) updatedData[i].genre = Array.isArray(meta.genre) ? meta.genre : meta.genre.split(",").map((g: string) => g.trim()).filter(Boolean)
-            if (meta.language && !entry.language) updatedData[i].language = meta.language
+            if (meta.language && !entry.language) updatedData[i].language = Array.isArray(meta.language) ? meta.language : meta.language.split(",").map((l: string) => l.trim()).filter(Boolean)
             if (meta.average_rating && !entry.average_rating) updatedData[i].average_rating = meta.average_rating
             if (meta.length && !entry.length) updatedData[i].length = meta.length
             if (meta.episodes && !entry.episodes) updatedData[i].episodes = meta.episodes

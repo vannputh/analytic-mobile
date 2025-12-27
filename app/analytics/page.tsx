@@ -1,8 +1,7 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
-import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabase"
+import { getEntries } from "@/lib/actions"
 import { MediaEntry } from "@/lib/database.types"
 import { FilterState, defaultFilterState, applyFilters, extractFilterOptions } from "@/lib/filter-types"
 import { useMediaMetrics } from "@/hooks/useMediaMetrics"
@@ -16,33 +15,48 @@ import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/page-header"
 
 export default function AnalyticsPage() {
-  const router = useRouter()
   const [entries, setEntries] = useState<MediaEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [filters, setFilters] = useState<FilterState>(defaultFilterState)
 
   useEffect(() => {
+    let isMounted = true
+
     async function fetchEntries() {
       try {
         setLoading(true)
-        const { data, error: fetchError } = await supabase
-          .from("media_entries")
-          .select("*")
-          .order("created_at", { ascending: false })
+        setError(null)
+        
+        // Use optimized server action instead of direct Supabase query
+        const result = await getEntries()
 
-        if (fetchError) throw fetchError
-        setEntries(data || [])
+        if (!isMounted) return
+
+        if (!result.success) {
+          throw new Error(result.error || "Failed to load entries")
+        }
+        
+        setEntries(result.data || [])
       } catch (err) {
+        if (!isMounted) return
+        
         console.error("Failed to fetch entries:", err)
-        setError(err instanceof Error ? err.message : "Failed to load entries")
-        toast.error("Failed to load entries")
+        const errorMessage = err instanceof Error ? err.message : "Failed to load entries"
+        setError(errorMessage)
+        toast.error(errorMessage)
       } finally {
-        setLoading(false)
+        if (isMounted) {
+          setLoading(false)
+        }
       }
     }
 
     fetchEntries()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   // Extract filter options from raw data

@@ -1,5 +1,6 @@
 import Papa from 'papaparse'
 import { CreateEntryInput } from './actions'
+import { differenceInDays, parseISO, isValid } from 'date-fns'
 
 // Column mapping for common variations
 const COLUMN_MAPPINGS: Record<string, string[]> = {
@@ -134,10 +135,13 @@ export function sanitizeEntry(
     if (!isNaN(num)) entry.price = num
   }
 
-  // Language
+  // Language (handle as array like genre)
   const language = getValue('language')
   if (language) {
-    entry.language = language.toString().trim()
+    const langStr = language.toString().trim()
+    if (langStr) {
+      entry.language = langStr.split(",").map((l: string) => l.trim()).filter(Boolean)
+    }
   }
 
   // Platform
@@ -180,10 +184,26 @@ export function sanitizeEntry(
     if (date) entry.finish_date = date
   }
 
-  // Time Taken
+  // Time Taken - auto-calculate if both dates are present and time_taken is not provided
   const timeTaken = getValue('time_taken')
-  if (timeTaken) {
+  if (timeTaken && timeTaken.toString().trim() !== '') {
     entry.time_taken = timeTaken.toString().trim()
+  } else if (entry.start_date && entry.finish_date) {
+    // Auto-calculate time_taken from dates
+    try {
+      const start = parseISO(entry.start_date)
+      const finish = parseISO(entry.finish_date)
+      if (isValid(start) && isValid(finish)) {
+        const days = differenceInDays(finish, start)
+        if (days >= 0) {
+          // Add 1 to make it inclusive (same day = 1 day)
+          const totalDays = days + 1
+          entry.time_taken = totalDays === 1 ? "1 day" : `${totalDays} days`
+        }
+      }
+    } catch (error) {
+      // Invalid date format, leave time_taken as null
+    }
   }
 
   // Poster URL
@@ -221,6 +241,7 @@ function sanitizeStatus(value: string): string {
   if (normalized.includes('finish') || normalized === 'complete' || normalized === 'done') return 'Finished'
   if (normalized.includes('hold') || normalized === 'paused') return 'On Hold'
   if (normalized.includes('drop') || normalized === 'abandoned') return 'Dropped'
+  if (normalized.includes('plan') || normalized.includes('watch') && normalized.includes('plan')) return 'Plan to Watch'
   
   return value.trim()
 }

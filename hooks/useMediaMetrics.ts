@@ -130,7 +130,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
 
       // Counts
       incrementRecord(countByMedium, medium)
-      incrementRecord(countByLanguage, entry.language)
       incrementRecord(countByPlatform, entry.platform)
       incrementRecord(countByStatus, entry.status)
       incrementRecord(countByType, entry.type)
@@ -142,6 +141,21 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
       if (entry.genre && Array.isArray(entry.genre)) {
         for (const g of entry.genre) {
           incrementRecord(countByGenre, g.trim())
+        }
+      }
+
+      // Language (flatten arrays, like genre)
+      if (entry.language) {
+        if (Array.isArray(entry.language)) {
+          for (const l of entry.language) {
+            incrementRecord(countByLanguage, l.trim())
+          }
+        } else if (typeof entry.language === 'string') {
+          // Handle backward compatibility with string values
+          entry.language.split(",").forEach((l: string) => {
+            const trimmed = l.trim()
+            if (trimmed) incrementRecord(countByLanguage, trimmed)
+          })
         }
       }
 

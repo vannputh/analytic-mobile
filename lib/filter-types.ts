@@ -43,9 +43,16 @@ export function applyFilters(data: MediaEntry[], filters: FilterState): MediaEnt
       if (!entry.medium || !filters.mediums.includes(entry.medium)) return false
     }
 
-    // Language filter
+    // Language filter (AND logic - entry must have ALL selected languages)
     if (filters.languages.length > 0) {
-      if (!entry.language || !filters.languages.includes(entry.language)) return false
+      if (!entry.language) return false
+      // Handle both array and string (for backward compatibility)
+      const entryLanguages = Array.isArray(entry.language) 
+        ? entry.language.map((l) => l.toLowerCase().trim())
+        : entry.language.split(",").map((l) => l.toLowerCase().trim())
+      for (const filterLanguage of filters.languages) {
+        if (!entryLanguages.includes(filterLanguage.toLowerCase().trim())) return false
+      }
     }
 
     // Platform filter
@@ -78,24 +85,70 @@ export function applyFilters(data: MediaEntry[], filters: FilterState): MediaEnt
 
 /**
  * Extract unique values from data for filter options
+ * Pulls all values from actual database entries
  */
 export function extractFilterOptions(data: MediaEntry[]) {
   const genres = new Set<string>()
-  const mediums = new Set<string>()
   const languages = new Set<string>()
-  const platforms = new Set<string>()
-  const statuses = new Set<string>()
   const types = new Set<string>()
+  const statuses = new Set<string>()
+  const mediums = new Set<string>()
+  const platforms = new Set<string>()
 
+  // Extract all values from data
   for (const entry of data) {
-    if (entry.medium) mediums.add(entry.medium)
-    if (entry.language) languages.add(entry.language)
-    if (entry.platform) platforms.add(entry.platform)
-    if (entry.status) statuses.add(entry.status)
     if (entry.type) types.add(entry.type)
-    if (entry.genre && Array.isArray(entry.genre)) {
-      entry.genre.forEach((g) => {
-        if (g.trim()) genres.add(g.trim())
+    if (entry.status) statuses.add(entry.status)
+    if (entry.medium) mediums.add(entry.medium)
+    if (entry.platform) platforms.add(entry.platform)
+    // Handle language as array (like genre) or string (for backward compatibility)
+    if (entry.language) {
+      let langArray: string[] = []
+      if (Array.isArray(entry.language)) {
+        langArray = entry.language
+      } else if (typeof entry.language === 'string') {
+        // Try to parse as JSON first (in case it's stored as JSON string like "[\"English\"]")
+        try {
+          const parsed = JSON.parse(entry.language)
+          if (Array.isArray(parsed)) {
+            langArray = parsed
+          } else {
+            // Split comma-separated strings
+            langArray = entry.language.split(",")
+          }
+        } catch {
+          // Not JSON, split as comma-separated string
+          langArray = entry.language.split(",")
+        }
+      }
+      langArray.forEach((l) => {
+        const trimmed = typeof l === 'string' ? l.trim() : String(l).trim()
+        if (trimmed) languages.add(trimmed)
+      })
+    }
+    // Handle genre - check for array, JSON string, or comma-separated string
+    if (entry.genre) {
+      let genreArray: string[] = []
+      if (Array.isArray(entry.genre)) {
+        genreArray = entry.genre
+      } else if (typeof entry.genre === 'string') {
+        // Try to parse as JSON first
+        try {
+          const parsed = JSON.parse(entry.genre)
+          if (Array.isArray(parsed)) {
+            genreArray = parsed
+          } else {
+            // Split comma-separated strings
+            genreArray = entry.genre.split(",")
+          }
+        } catch {
+          // Not JSON, split as comma-separated string
+          genreArray = entry.genre.split(",")
+        }
+      }
+      genreArray.forEach((g) => {
+        const trimmed = typeof g === 'string' ? g.trim() : String(g).trim()
+        if (trimmed) genres.add(trimmed)
       })
     }
   }

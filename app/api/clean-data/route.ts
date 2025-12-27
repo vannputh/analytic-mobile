@@ -9,7 +9,7 @@ RULES:
 3. Strip all currency symbols from prices, output as plain numbers
 4. Parse durations into standardized format: "X min" or "Xh Ym" (e.g., "2h" becomes "120 min", "1:30" becomes "90 min")
 5. Normalize medium values to one of: Movie, TV Show, Book, Game, Podcast
-6. Normalize status values to one of: Watching, Finished, Dropped, Plan to Watch, On Hold
+6. Normalize status values to one of: Finished, In Progress, On Hold, Dropped, Plan to Watch
 7. Genre should be an array of strings. Split comma-separated genres and trim whitespace
 8. If a field is empty or "N/A" or "-", set it to null
 9. Trim all string values

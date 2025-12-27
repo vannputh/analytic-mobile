@@ -324,13 +324,7 @@ export function GlobalFilterBar({
             </Badge>
           )}
           <span>
-            {filteredCount === totalCount ? (
-              <>{totalCount} items</>
-            ) : (
-              <>
-                {filteredCount} <span className="text-muted-foreground/60">/ {totalCount}</span>
-              </>
-            )}
+            {totalCount} items
           </span>
         </div>
       </div>

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   ColumnDef,
   ColumnFiltersState,
@@ -21,6 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { MediaEntry } from '@/types/database'
 import { ArrowUpDown, ChevronLeft, ChevronRight, Eye, Search } from 'lucide-react'
 import { SafeImage } from '@/components/ui/safe-image'
+import { getUserPreference, setUserPreference } from '@/lib/user-preferences'
+import { STATUS_OPTIONS, MEDIUM_OPTIONS } from '@/lib/types'
 
 interface DataTableProps {
   data: MediaEntry[]
@@ -31,6 +33,7 @@ export function DataTable({ data }: DataTableProps) {
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
   const [globalFilter, setGlobalFilter] = useState('')
+  const [columnsLoaded, setColumnsLoaded] = useState(false)
 
   const columns: ColumnDef<MediaEntry>[] = [
     {
@@ -210,6 +213,28 @@ export function DataTable({ data }: DataTableProps) {
     },
   ]
 
+  // Load column visibility from Supabase
+  useEffect(() => {
+    async function loadColumns() {
+      const saved = await getUserPreference<Record<string, boolean>>("data-table-visible-columns")
+      if (saved && typeof saved === 'object') {
+        setColumnVisibility(saved)
+      }
+      setColumnsLoaded(true)
+    }
+    loadColumns()
+  }, [])
+
+  // Save column visibility to Supabase
+  useEffect(() => {
+    if (!columnsLoaded) return // Don't save until we've loaded initial state
+    
+    async function saveColumns() {
+      await setUserPreference("data-table-visible-columns", columnVisibility)
+    }
+    saveColumns()
+  }, [columnVisibility, columnsLoaded])
+
   const table = useReactTable({
     data,
     columns,
@@ -231,6 +256,7 @@ export function DataTable({ data }: DataTableProps) {
       pagination: {
         pageSize: 20,
       },
+      columnVisibility: columnsLoaded ? columnVisibility : {},
     },
   })
 
@@ -259,10 +285,11 @@ export function DataTable({ data }: DataTableProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
-            <SelectItem value="Finished">Finished</SelectItem>
-            <SelectItem value="In Progress">In Progress</SelectItem>
-            <SelectItem value="On Hold">On Hold</SelectItem>
-            <SelectItem value="Dropped">Dropped</SelectItem>
+            {STATUS_OPTIONS.map((status) => (
+              <SelectItem key={status} value={status}>
+                {status}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
@@ -277,11 +304,11 @@ export function DataTable({ data }: DataTableProps) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Media</SelectItem>
-            <SelectItem value="Movie">Movie</SelectItem>
-            <SelectItem value="TV Show">TV Show</SelectItem>
-            <SelectItem value="Book">Book</SelectItem>
-            <SelectItem value="Theatre">Theatre</SelectItem>
-            <SelectItem value="Podcast">Podcast</SelectItem>
+            {MEDIUM_OPTIONS.map((medium) => (
+              <SelectItem key={medium} value={medium}>
+                {medium}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>

@@ -59,7 +59,16 @@ export function Filters({
               id="search"
               placeholder="Search by title..."
               value={search}
-              onChange={(e) => onSearchChange(e.target.value)}
+              onChange={(e) => {
+                onSearchChange(e.target.value)
+              }}
+              onKeyDown={(e) => {
+                // Prevent form submission on Enter key
+                if (e.key === "Enter") {
+                  e.preventDefault()
+                  e.stopPropagation()
+                }
+              }}
               className="pl-9"
             />
           </div>

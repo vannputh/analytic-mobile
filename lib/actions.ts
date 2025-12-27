@@ -23,6 +23,9 @@ export async function createEntry(data: CreateEntryInput) {
 
     revalidatePath('/')
     revalidatePath('/dashboard')
+    revalidatePath('/entries')
+    revalidatePath('/analytics')
+    revalidatePath('/library')
     
     return { success: true, data: newEntry }
   } catch (error) {
@@ -52,8 +55,36 @@ export async function updateEntry(id: string, data: Partial<CreateEntryInput>) {
 
     revalidatePath('/')
     revalidatePath('/dashboard')
+    revalidatePath('/entries')
+    revalidatePath('/analytics')
+    revalidatePath('/library')
     
     return { success: true, data: updatedEntry }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
+  }
+}
+
+export async function getEntry(id: string) {
+  try {
+    const supabase = await createClient()
+    
+    const { data, error } = await supabase
+      .from('media_entries')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.error('Error fetching entry:', error)
+      return { success: false, error: error.message }
+    }
+
+    return { success: true, data }
   } catch (error) {
     console.error('Unexpected error:', error)
     return { 
@@ -79,6 +110,9 @@ export async function deleteEntry(id: string) {
 
     revalidatePath('/')
     revalidatePath('/dashboard')
+    revalidatePath('/entries')
+    revalidatePath('/analytics')
+    revalidatePath('/library')
     
     return { success: true }
   } catch (error) {
@@ -120,6 +154,9 @@ export async function batchUploadEntries(entries: CreateEntryInput[]) {
 
     revalidatePath('/')
     revalidatePath('/dashboard')
+    revalidatePath('/entries')
+    revalidatePath('/analytics')
+    revalidatePath('/library')
     
     return { 
       success: true, 
@@ -139,6 +176,9 @@ export async function getEntries(filters?: {
   status?: string
   medium?: string
   search?: string
+  limit?: number
+  offset?: number
+  getCount?: boolean
 }) {
   try {
     const supabase = await createClient()
@@ -160,6 +200,37 @@ export async function getEntries(filters?: {
       query = query.ilike('title', `%${filters.search}%`)
     }
 
+    // Get total count if requested (before applying pagination)
+    let totalCount: number | null = null
+    if (filters?.getCount) {
+      const countQuery = supabase
+        .from('media_entries')
+        .select('*', { count: 'exact', head: true })
+      
+      if (filters?.status) {
+        countQuery.eq('status', filters.status)
+      }
+      if (filters?.medium) {
+        countQuery.eq('medium', filters.medium)
+      }
+      if (filters?.search) {
+        countQuery.ilike('title', `%${filters.search}%`)
+      }
+
+      const { count, error: countError } = await countQuery
+      if (!countError) {
+        totalCount = count
+      }
+    }
+
+    // Add pagination if specified
+    if (filters?.limit !== undefined && filters?.offset !== undefined) {
+      // Use range for pagination (inclusive on both ends)
+      query = query.range(filters.offset, filters.offset + filters.limit - 1)
+    } else if (filters?.limit !== undefined) {
+      query = query.limit(filters.limit)
+    }
+
     const { data, error } = await query
 
     if (error) {
@@ -167,7 +238,11 @@ export async function getEntries(filters?: {
       return { success: false, error: error.message }
     }
 
-    return { success: true, data: data || [] }
+    return { 
+      success: true, 
+      data: data || [],
+      count: totalCount
+    }
   } catch (error) {
     console.error('Unexpected error:', error)
     return { 
@@ -180,39 +255,62 @@ export async function getEntries(filters?: {
 export async function getStats() {
   try {
     const supabase = await createClient()
+    const currentYear = new Date().getFullYear()
+    const yearStart = `${currentYear}-01-01`
+    const yearEnd = `${currentYear}-12-31`
     
-    // Get all entries
-    const { data: allEntries, error } = await supabase
-      .from('media_entries')
-      .select('*')
+    // Run all queries in parallel for better performance
+    const [totalCountResult, finishedCountResult, priceMediumResult] = await Promise.all([
+      // Get total entries count
+      supabase
+        .from('media_entries')
+        .select('*', { count: 'exact', head: true }),
+      
+      // Get finished this year count (using database filter)
+      supabase
+        .from('media_entries')
+        .select('*', { count: 'exact', head: true })
+        .eq('status', 'Finished')
+        .gte('finish_date', yearStart)
+        .lte('finish_date', yearEnd),
+      
+      // Get only price and medium columns (much smaller than select *)
+      supabase
+        .from('media_entries')
+        .select('price, medium')
+    ])
 
-    if (error) {
-      console.error('Error fetching stats:', error)
-      return { success: false, error: error.message }
+    if (totalCountResult.error) {
+      console.error('Error fetching total count:', totalCountResult.error)
+      return { success: false, error: totalCountResult.error.message }
     }
 
-    const entries = allEntries || []
-    const currentYear = new Date().getFullYear()
+    if (finishedCountResult.error) {
+      console.error('Error fetching finished count:', finishedCountResult.error)
+      return { success: false, error: finishedCountResult.error.message }
+    }
 
-    // Calculate stats
-    const finishedThisYear = entries.filter(entry => {
-      if (entry.finish_date) {
-        const finishYear = new Date(entry.finish_date).getFullYear()
-        return finishYear === currentYear && entry.status === 'Finished'
-      }
-      return false
-    }).length
+    if (priceMediumResult.error) {
+      console.error('Error fetching price/medium data:', priceMediumResult.error)
+      return { success: false, error: priceMediumResult.error.message }
+    }
 
-    const totalSpent = entries.reduce((sum, entry) => {
-      return sum + (entry.price || 0)
-    }, 0)
+    const totalEntries = totalCountResult.count || 0
+    const finishedThisYear = finishedCountResult.count || 0
+    const entries = priceMediumResult.data || []
 
-    // Get top medium
-    const mediumCounts = entries.reduce((acc, entry) => {
+    // Calculate total spent and medium counts from minimal data
+    let totalSpent = 0
+    const mediumCounts: Record<string, number> = {}
+
+    for (const entry of entries) {
+      // Sum prices
+      totalSpent += entry.price || 0
+      
+      // Count mediums
       const medium = entry.medium || 'Unknown'
-      acc[medium] = (acc[medium] || 0) + 1
-      return acc
-    }, {} as Record<string, number>)
+      mediumCounts[medium] = (mediumCounts[medium] || 0) + 1
+    }
 
     const topMedium = Object.entries(mediumCounts).sort((a, b) => b[1] - a[1])[0]
 
@@ -223,7 +321,7 @@ export async function getStats() {
         totalSpent,
         topMedium: topMedium ? topMedium[0] : 'None',
         topMediumCount: topMedium ? topMedium[1] : 0,
-        totalEntries: entries.length,
+        totalEntries,
       }
     }
   } catch (error) {
@@ -239,11 +337,13 @@ export async function getStatusHistory(mediaEntryId: string) {
   try {
     const supabase = await createClient()
     
+    // Limit to most recent 100 entries for performance
     const { data, error } = await supabase
       .from('media_status_history')
       .select('*')
       .eq('media_entry_id', mediaEntryId)
       .order('changed_at', { ascending: false })
+      .limit(100)
 
     if (error) {
       console.error('Error fetching status history:', error)
@@ -302,8 +402,55 @@ export async function restartEntry(id: string) {
 
     revalidatePath('/')
     revalidatePath('/dashboard')
+    revalidatePath('/entries')
+    revalidatePath('/analytics')
+    revalidatePath('/library')
     
     return { success: true, data: updatedEntry }
+  } catch (error) {
+    console.error('Unexpected error:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Unknown error' 
+    }
+  }
+}
+
+export async function getUniqueFieldValues() {
+  try {
+    const supabase = await createClient()
+    
+    // Get all entries to extract unique values
+    const { data, error } = await supabase
+      .from('media_entries')
+      .select('type, status, medium, platform')
+
+    if (error) {
+      console.error('Error fetching unique values:', error)
+      return { success: false, error: error.message }
+    }
+
+    const types = new Set<string>()
+    const statuses = new Set<string>()
+    const mediums = new Set<string>()
+    const platforms = new Set<string>()
+
+    for (const entry of data || []) {
+      if (entry.type) types.add(entry.type)
+      if (entry.status) statuses.add(entry.status)
+      if (entry.medium) mediums.add(entry.medium)
+      if (entry.platform) platforms.add(entry.platform)
+    }
+
+    return {
+      success: true,
+      data: {
+        types: Array.from(types).sort(),
+        statuses: Array.from(statuses).sort(),
+        mediums: Array.from(mediums).sort(),
+        platforms: Array.from(platforms).sort(),
+      }
+    }
   } catch (error) {
     console.error('Unexpected error:', error)
     return { 
