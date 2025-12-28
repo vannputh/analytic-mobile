@@ -417,11 +417,11 @@ export default function AddPage() {
         
         // Also pass title if available (for fallback or additional context)
         if (hasTitle) {
-          url += `&title=${encodeURIComponent(formData.title.trim())}`
+          url += `&title=${encodeURIComponent(hasTitle)}`
         }
       } else {
         // Use title for search
-        url = `/api/metadata?title=${encodeURIComponent(formData.title!.trim())}&source=${source}`
+        url = `/api/metadata?title=${encodeURIComponent(hasTitle!)}&source=${source}`
       }
       
       if (formData.medium) {
