@@ -15,7 +15,7 @@ const sans = Space_Grotesk({
 })
 
 export const metadata: Metadata = {
-  title: "Life Analytics",
+  title: "analytics",
   description: "Media consumption tracking and analytics",
 }
 

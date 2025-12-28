@@ -21,6 +21,8 @@ function LoginPageContent() {
     const error = searchParams.get("error")
     if (error === "auth_failed") {
       toast.error("Authentication failed. Please try again.")
+    } else if (error === "unauthorized") {
+      toast.error("Access denied. This account is not authorized.")
     }
   }, [searchParams])
 
@@ -35,6 +37,28 @@ function LoginPageContent() {
     setLoading(true)
 
     try {
+      // First, check if user exists
+      const checkResponse = await fetch("/api/auth/check-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email }),
+      })
+
+      const checkData = await checkResponse.json()
+
+      if (!checkResponse.ok) {
+        throw new Error(checkData.error || "Failed to verify user")
+      }
+
+      if (!checkData.exists) {
+        toast.error("This email is not registered. Please contact the administrator.")
+        setLoading(false)
+        return
+      }
+
+      // User exists, proceed with sending magic link
       const redirectTo = searchParams.get("redirect") || "/"
       const { error } = await supabase.auth.signInWithOtp({
         email,
