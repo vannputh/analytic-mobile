@@ -150,12 +150,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
           for (const l of entry.language) {
             incrementRecord(countByLanguage, l.trim())
           }
-        } else if (typeof entry.language === 'string') {
-          // Handle backward compatibility with string values
-          entry.language.split(",").forEach((l: string) => {
-            const trimmed = l.trim()
-            if (trimmed) incrementRecord(countByLanguage, trimmed)
-          })
         }
       }
 

@@ -5,10 +5,13 @@ import { ManualEntryForm } from '@/components/manual-entry-form'
 import { UploadModal } from '@/components/upload-modal'
 import { Sidebar } from '@/components/sidebar'
 import { Skeleton } from '@/components/ui/skeleton'
+import { MediaEntry } from '@/types/database'
+
+export const dynamic = 'force-dynamic'
 
 async function LibraryContent() {
   const entriesResult = await getEntries()
-  const entries = entriesResult.success ? entriesResult.data : []
+  const entries: MediaEntry[] = entriesResult.success && entriesResult.data ? (entriesResult.data as MediaEntry[]) : []
 
   return (
     <>

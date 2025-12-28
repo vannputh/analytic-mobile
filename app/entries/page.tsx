@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useMemo, useRef } from "react"
+import { useState, useEffect, useMemo, useRef, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { getEntries, deleteEntry } from "@/lib/actions"
@@ -56,7 +56,7 @@ function paramsToFilters(params: URLSearchParams): FilterState {
 
 const ITEMS_PER_PAGE = 25
 
-export default function EntriesPage() {
+function EntriesPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [allEntries, setAllEntries] = useState<MediaEntry[]>([])
@@ -91,7 +91,11 @@ export default function EntriesPage() {
     async function loadColumns() {
       const saved = await getUserPreference<string[]>("media-table-visible-columns")
       if (saved && Array.isArray(saved)) {
-        setVisibleColumns(new Set(saved))
+        // Filter to only include valid ColumnKey values
+        const validColumns = saved.filter((key): key is ColumnKey => 
+          key in COLUMN_DEFINITIONS
+        )
+        setVisibleColumns(new Set(validColumns))
       }
       setColumnsLoaded(true)
     }
@@ -369,13 +373,9 @@ export default function EntriesPage() {
       // Search in medium
       if (entry.medium?.toLowerCase().includes(query)) return true
 
-      // Search in language (array or string for backward compatibility)
-      if (entry.language) {
-        if (Array.isArray(entry.language)) {
-          if (entry.language.some(l => l.toLowerCase().includes(query))) return true
-        } else {
-          if (entry.language.toLowerCase().includes(query)) return true
-        }
+      // Search in language
+      if (entry.language && Array.isArray(entry.language)) {
+        if (entry.language.some(l => l.toLowerCase().includes(query))) return true
       }
 
       // Search in status
@@ -660,6 +660,21 @@ export default function EntriesPage() {
         )}
       </main>
     </div>
+  )
+}
+
+export default function EntriesPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm font-mono">Loading...</p>
+        </div>
+      </div>
+    }>
+      <EntriesPageContent />
+    </Suspense>
   )
 }
 

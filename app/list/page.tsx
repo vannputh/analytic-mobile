@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { MediaEntry } from "@/lib/database.types";
 import { supabase } from "@/lib/supabase";
@@ -12,7 +12,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Plus, LayoutGrid, LayoutList, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 
-export default function ListPage() {
+function ListPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [entries, setEntries] = useState<MediaEntry[]>([]);
@@ -319,6 +319,20 @@ export default function ListPage() {
         )}
       </div>
     </main>
+  );
+}
+
+export default function ListPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <p className="text-sm font-mono">Loading...</p>
+        </div>
+      </div>
+    }>
+      <ListPageContent />
+    </Suspense>
   );
 }
 

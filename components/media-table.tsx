@@ -165,7 +165,11 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
     async function loadColumns() {
       const saved = await getUserPreference<string[]>("media-table-visible-columns");
       if (saved && Array.isArray(saved)) {
-        setVisibleColumns(new Set(saved));
+        // Filter to only include valid ColumnKey values
+        const validColumns = saved.filter((key): key is ColumnKey => 
+          key in COLUMN_DEFINITIONS
+        );
+        setVisibleColumns(new Set(validColumns));
       }
       setColumnsLoaded(true);
     }
@@ -265,8 +269,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
           bValue = b.average_rating ?? 0;
           break;
         case "genre":
-          aValue = Array.isArray(a.genre) ? a.genre.join(", ").toLowerCase() : (a.genre?.toLowerCase() || "");
-          bValue = Array.isArray(b.genre) ? b.genre.join(", ").toLowerCase() : (b.genre?.toLowerCase() || "");
+          aValue = Array.isArray(a.genre) ? a.genre.join(", ").toLowerCase() : "";
+          bValue = Array.isArray(b.genre) ? b.genre.join(", ").toLowerCase() : "";
           break;
         case "platform":
           aValue = a.platform?.toLowerCase() || "";
@@ -289,8 +293,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
           bValue = b.length?.toLowerCase() || "";
           break;
         case "language":
-          aValue = a.language?.toLowerCase() || "";
-          bValue = b.language?.toLowerCase() || "";
+          aValue = Array.isArray(a.language) ? a.language.join(", ").toLowerCase() : "";
+          bValue = Array.isArray(b.language) ? b.language.join(", ").toLowerCase() : "";
           break;
         case "price":
           aValue = a.price ?? 0;
@@ -531,9 +535,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
             // Preserve original case of existing genres
             const currentGenres = Array.isArray(entry.genre) 
               ? entry.genre.map((g) => g.trim()).filter((g) => g.length > 0)
-              : entry.genre 
-                ? [entry.genre.trim()]
-                : [];
+              : [];
 
             // Create a map of lowercase -> original case for existing genres
             const existingGenreMap = new Map<string, string>();

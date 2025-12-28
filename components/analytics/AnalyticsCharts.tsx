@@ -98,8 +98,8 @@ function TimelineChart({ data }: TimelineChartProps) {
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number, name: string) => [
-            name === "hours" ? `${value}h (${formatDuration(value * 60)})` : value,
+          formatter={(value: number | undefined, name: string | undefined) => [
+            value !== undefined && name === "hours" ? `${value}h (${formatDuration(value * 60)})` : value ?? 0,
             "Time",
           ]}
         />
@@ -168,7 +168,7 @@ function CostChart({ data }: CostChartProps) {
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number) => [formatCurrency(value), "Spent"]}
+          formatter={(value: number | undefined) => [formatCurrency(value ?? 0), "Spent"]}
         />
         <Legend
           wrapperStyle={{ fontSize: "10px", fontFamily: "monospace" }}
@@ -219,7 +219,7 @@ function GenrePieChart({ data, title }: GenrePieChartProps) {
           paddingAngle={2}
           dataKey="value"
           label={({ name, percent }) =>
-            `${name} (${(percent * 100).toFixed(0)}%)`
+            `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
           }
           labelLine={{ stroke: "hsl(0, 0%, 60%)", strokeWidth: 1 }}
         >
@@ -232,7 +232,7 @@ function GenrePieChart({ data, title }: GenrePieChartProps) {
         </Pie>
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number) => [formatNumber(value), "Items"]}
+          formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Items"]}
         />
       </PieChart>
     </ResponsiveContainer>
@@ -269,7 +269,7 @@ function TreemapChart({ data, title }: TreemapChartProps) {
         stroke="hsl(0, 0%, 100%)"
         fill={ACCENT_COLOR}
         content={({ x, y, width, height, name, value }) => {
-          if (width < 40 || height < 30) return null
+          if (width < 40 || height < 30) return <g />
           return (
             <g>
               <rect
@@ -308,7 +308,7 @@ function TreemapChart({ data, title }: TreemapChartProps) {
       >
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number) => [formatNumber(value), "Items"]}
+          formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Items"]}
         />
       </Treemap>
     </ResponsiveContainer>
@@ -352,7 +352,7 @@ function CountByMonthChart({ data }: CountByMonthChartProps) {
         />
         <Tooltip
           contentStyle={tooltipStyle}
-          formatter={(value: number) => [formatNumber(value), "Items"]}
+          formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Items"]}
         />
         <Bar dataKey="count" fill={ACCENT_COLOR} radius={[2, 2, 0, 0]} />
       </BarChart>

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MediaEntry } from "@/lib/database.types"
 import { createEntry, updateEntry, CreateEntryInput, getUniqueFieldValues, getEntry } from "@/lib/actions"
@@ -29,7 +29,7 @@ import { toast } from "sonner"
 import { SafeImage } from "@/components/ui/safe-image"
 import { differenceInDays, parseISO, isValid } from "date-fns"
 
-export default function AddPage() {
+function AddPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const entryId = searchParams.get("id")
@@ -1455,5 +1455,20 @@ export default function AddPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function AddPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin" />
+          <p className="text-sm font-mono">Loading...</p>
+        </div>
+      </div>
+    }>
+      <AddPageContent />
+    </Suspense>
   )
 }

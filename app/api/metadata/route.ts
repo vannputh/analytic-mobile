@@ -510,7 +510,9 @@ export async function GET(request: NextRequest) {
           tmdbId = await findTMDBByIMDb(imdbIdParam.trim(), tmdbApiKey);
         } else if (title) {
           // Search TMDB by title
-          tmdbId = await searchTMDB(title, tmdbApiKey, type, year ?? undefined);
+          const searchYear: string | undefined = year ?? undefined;
+          const searchType: string | undefined = type ?? undefined;
+          tmdbId = await searchTMDB(title, tmdbApiKey, searchType, searchYear);
         }
       } catch (error) {
         console.error("TMDB search error:", error);
