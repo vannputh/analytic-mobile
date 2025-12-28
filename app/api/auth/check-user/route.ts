@@ -20,9 +20,16 @@ export async function POST(request: NextRequest) {
     const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
-      console.error('Missing Supabase service role key')
+      const missingVars = []
+      if (!supabaseUrl) missingVars.push('NEXT_PUBLIC_SUPABASE_URL')
+      if (!supabaseServiceRoleKey) missingVars.push('SUPABASE_SERVICE_ROLE_KEY')
+      
+      console.error(`Missing required environment variables: ${missingVars.join(', ')}`)
       return NextResponse.json(
-        { error: 'Server configuration error' },
+        { 
+          error: 'Server configuration error',
+          details: `Missing environment variables: ${missingVars.join(', ')}. Please check your .env.local file.`
+        },
         { status: 500 }
       )
     }

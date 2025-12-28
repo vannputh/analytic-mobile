@@ -33,19 +33,43 @@ export async function proxy(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser()
 
-  // Protect all routes except login and auth callback
-  if (!user && !request.nextUrl.pathname.startsWith("/login") && !request.nextUrl.pathname.startsWith("/auth")) {
+  const pathname = request.nextUrl.pathname
+  
+  // Always allow API routes through - never redirect them
+  // API routes should handle their own authentication/authorization
+  if (pathname.startsWith("/api")) {
+    return supabaseResponse
+  }
+
+  // Public routes that don't require authentication
+  const isPublicRoute = pathname.startsWith("/login") || 
+                       pathname.startsWith("/auth")
+  
+  // Only redirect GET requests for page routes (not POST, PUT, DELETE, etc.)
+  // API routes are already handled above
+  if (!user && !isPublicRoute && request.method === "GET") {
     const url = request.nextUrl.clone()
     url.pathname = "/login"
-    url.searchParams.set("redirect", request.nextUrl.pathname)
+    url.searchParams.set("redirect", pathname)
     return NextResponse.redirect(url)
   }
 
-  // Redirect authenticated users away from login page
-  if (user && request.nextUrl.pathname === "/login") {
+  // Redirect authenticated users away from login page (only GET requests)
+  if (user && pathname === "/login" && request.method === "GET") {
     const url = request.nextUrl.clone()
     url.pathname = "/"
     return NextResponse.redirect(url)
+  }
+
+  // Remove browsing-topics from Permissions-Policy header to avoid warnings
+  const permissionsPolicy = supabaseResponse.headers.get("Permissions-Policy")
+  if (permissionsPolicy) {
+    // Remove browsing-topics if present
+    const policies = permissionsPolicy.split(",").map(p => p.trim())
+    const filteredPolicies = policies.filter(p => !p.startsWith("browsing-topics"))
+    if (filteredPolicies.length !== policies.length) {
+      supabaseResponse.headers.set("Permissions-Policy", filteredPolicies.join(", "))
+    }
   }
 
   return supabaseResponse

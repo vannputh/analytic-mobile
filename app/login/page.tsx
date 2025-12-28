@@ -38,7 +38,9 @@ function LoginPageContent() {
 
     try {
       // First, check if user exists
-      const checkResponse = await fetch("/api/auth/check-user", {
+      // Use absolute URL to avoid issues with relative paths
+      const apiUrl = `${window.location.origin}/api/auth/check-user`
+      const checkResponse = await fetch(apiUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -46,17 +48,44 @@ function LoginPageContent() {
         body: JSON.stringify({ email }),
       })
 
+      // Check content type before parsing
+      const contentType = checkResponse.headers.get("content-type")
+      const isJson = contentType?.includes("application/json")
+
       if (!checkResponse.ok) {
         // Try to parse error message, but handle empty responses
         let errorMessage = "Failed to verify user"
+        let errorDetails: string | undefined
         try {
-          const errorData = await checkResponse.json()
-          errorMessage = errorData.error || errorMessage
-        } catch {
+          if (isJson) {
+            const errorData = await checkResponse.json()
+            errorMessage = errorData.error || errorMessage
+            errorDetails = errorData.details
+          } else {
+            // If not JSON, read as text to see what we got
+            const text = await checkResponse.text()
+            console.error("Non-JSON error response:", text.substring(0, 200))
+            errorMessage = checkResponse.statusText || errorMessage
+          }
+        } catch (parseError) {
           // If response is not JSON, use status text
           errorMessage = checkResponse.statusText || errorMessage
         }
-        throw new Error(errorMessage)
+        console.error("Check user failed:", {
+          status: checkResponse.status,
+          statusText: checkResponse.statusText,
+          url: apiUrl,
+          contentType,
+          details: errorDetails,
+        })
+        const fullErrorMessage = errorDetails ? `${errorMessage}: ${errorDetails}` : errorMessage
+        throw new Error(fullErrorMessage)
+      }
+
+      if (!isJson) {
+        const text = await checkResponse.text()
+        console.error("Expected JSON but got:", text.substring(0, 200))
+        throw new Error("Invalid response format from server")
       }
 
       const checkData = await checkResponse.json()

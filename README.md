@@ -93,9 +93,12 @@ Create a `.env.local` file in the root directory:
 ```env
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
 OMDB_API_KEY=your_omdb_api_key (optional)
 GOOGLE_GENERATIVE_AI_API_KEY=your_google_ai_key (optional)
 ```
+
+**Note:** The `SUPABASE_SERVICE_ROLE_KEY` is required for the user authentication check. You can find it in your Supabase project settings under "API" → "Service Role Key" (keep this secret and never expose it to the client).
 
 4. Set up the database:
    - Create a Supabase project
