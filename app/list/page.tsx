@@ -9,6 +9,7 @@ import { MediaCardGrid } from "@/components/media-card-grid";
 import { Filters } from "@/components/filters";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MediaTableSkeleton, MediaCardSkeleton } from "@/components/skeletons";
 import { Plus, LayoutGrid, LayoutList, CheckSquare } from "lucide-react";
 import { toast } from "sonner";
 
@@ -201,24 +202,50 @@ function ListPageContent() {
     router.push(`/add?id=${entry.id}`);
   }
 
+  const uniqueGenres = useMemo(() => {
+    const genreSet = new Set<string>();
+    entries.forEach(entry => {
+      if (entry.genre && Array.isArray(entry.genre)) {
+        entry.genre.forEach(g => {
+          if (g && g.trim()) genreSet.add(g.trim());
+        });
+      }
+    });
+    return Array.from(genreSet).sort();
+  }, [entries]);
+
   if (loading) {
     return (
-      <div className="min-h-screen p-8">
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8">
         <div className="max-w-7xl mx-auto space-y-6">
-          <Skeleton className="h-12 w-64" />
-          <Skeleton className="h-24 w-full" />
-          <Skeleton className="h-96 w-full" />
+          <div className="flex justify-between items-center">
+            <Skeleton className="h-10 w-48" />
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+          <Skeleton className="h-16 w-full" />
+          {viewMode === "table" ? (
+            <MediaTableSkeleton />
+          ) : (
+            <div className="grid gap-4 sm:gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {Array.from({ length: 8 }).map((_, i) => (
+                <MediaCardSkeleton key={i} />
+              ))}
+            </div>
+          )}
         </div>
       </div>
     );
   }
 
   return (
-    <main className="min-h-screen p-8">
-      <div className="max-w-7xl mx-auto space-y-6">
-        <div className="flex items-center justify-between">
+    <main className="min-h-screen p-4 sm:p-6 lg:p-8">
+      <div className="max-w-7xl mx-auto space-y-4 sm:space-y-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
           <div>
-            <h1 className="text-4xl font-bold">All Media</h1>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold">All Media</h1>
             <p className="text-muted-foreground mt-2">
               {filteredEntries.length} {filteredEntries.length === 1 ? "entry" : "entries"}
               {search || type !== "all" || status !== "all" || platform !== "all" || medium !== "all"
@@ -226,7 +253,7 @@ function ListPageContent() {
                 : ""}
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {viewMode === "table" && (
               <Button
                 variant={showSelectMode ? "default" : "outline"}
@@ -274,17 +301,7 @@ function ListPageContent() {
           platform={platform}
           medium={medium}
           genre={genre}
-          genres={useMemo(() => {
-            const genreSet = new Set<string>();
-            entries.forEach(entry => {
-              if (entry.genre && Array.isArray(entry.genre)) {
-                entry.genre.forEach(g => {
-                  if (g && g.trim()) genreSet.add(g.trim());
-                });
-              }
-            });
-            return Array.from(genreSet).sort();
-          }, [entries])}
+          genres={uniqueGenres}
           onSearchChange={setSearch}
           onTypeChange={setType}
           onStatusChange={setStatus}
@@ -304,7 +321,7 @@ function ListPageContent() {
             onEntryUpdate={(updatedEntry) => {
               // Update the entry in the entries array without full reload
               // This preserves all table state (sort, filters, pagination, scroll position)
-              setEntries(prev => 
+              setEntries(prev =>
                 prev.map(entry => entry.id === updatedEntry.id ? updatedEntry : entry)
               )
               // Note: No refresh is triggered, so filters, sort, and pagination state are preserved
@@ -325,9 +342,17 @@ function ListPageContent() {
 export default function ListPage() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <p className="text-sm font-mono">Loading...</p>
+      <div className="min-h-screen p-4 sm:p-6 lg:p-8">
+        <div className="max-w-7xl mx-auto space-y-6">
+          <div className="flex justify-between items-center">
+            <Skeleton className="h-10 w-48" />
+            <div className="flex gap-2">
+              <Skeleton className="h-9 w-24" />
+              <Skeleton className="h-9 w-24" />
+            </div>
+          </div>
+          <Skeleton className="h-16 w-full" />
+          <MediaTableSkeleton />
         </div>
       </div>
     }>

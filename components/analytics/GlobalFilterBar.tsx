@@ -246,13 +246,13 @@ export function GlobalFilterBar({
 
   return (
     <div className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
-      <div className="flex items-center gap-2 p-3 overflow-x-auto">
-        <div className="flex items-center gap-1.5 text-muted-foreground">
+      <div className="flex items-center gap-1.5 sm:gap-2 p-2 sm:p-3 overflow-x-auto scrollbar-hide">
+        <div className="hidden sm:flex items-center gap-1.5 text-muted-foreground flex-shrink-0">
           <Filter className="h-3.5 w-3.5" />
           <span className="text-xs font-mono uppercase tracking-wider">Filters</span>
         </div>
-        
-        <Separator orientation="vertical" className="h-6" />
+
+        <Separator orientation="vertical" className="h-6 hidden sm:block" />
 
         <DateRangePicker
           from={filters.dateFrom}
@@ -317,7 +317,7 @@ export function GlobalFilterBar({
           </>
         )}
 
-        <div className="ml-auto flex items-center gap-2 text-xs font-mono text-muted-foreground">
+        <div className="ml-auto flex items-center gap-1 sm:gap-2 text-[10px] sm:text-xs font-mono text-muted-foreground flex-shrink-0">
           {hasActiveFilters && (
             <Badge variant="outline" className="font-mono text-[10px]">
               {activeFilterCount} active
@@ -331,7 +331,7 @@ export function GlobalFilterBar({
 
       {/* Active filter pills */}
       {hasActiveFilters && (
-        <div className="flex items-center gap-1.5 px-3 pb-2 flex-wrap">
+        <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-3 pb-2 flex-wrap">
           {(filters.dateFrom || filters.dateTo) && (
             <Badge
               variant="secondary"

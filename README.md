@@ -7,7 +7,7 @@ A comprehensive media tracking and analytics application built with Next.js, Rea
 ### 📊 Media Tracking
 - **Multiple Media Types**: Track Movies, TV Shows, Books, Games, Podcasts, and Live Theatre
 - **Rich Metadata**: Store title, genre, language, ratings, dates, prices, platforms, and more
-- **Status Management**: Track status (Finished, In Progress, On Hold, Dropped, Plan to Watch) with history
+- **Status Management**: Track status (Finished, Watching, On Hold, Dropped, Plan to Watch) with history
 - **Custom Ratings**: Personal ratings alongside average ratings from external sources
 - **Date Tracking**: Start and finish dates for each entry
 - **Poster Images**: Automatic poster/image fetching and display

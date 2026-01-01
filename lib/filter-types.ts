@@ -1,4 +1,5 @@
 import { MediaEntry } from "./database.types"
+import { normalizeLanguage } from "./language-utils"
 
 export interface FilterState {
   dateFrom: string | null
@@ -46,12 +47,12 @@ export function applyFilters(data: MediaEntry[], filters: FilterState): MediaEnt
     // Language filter (AND logic - entry must have ALL selected languages)
     if (filters.languages.length > 0) {
       if (!entry.language) return false
-      // Handle array values
-      const entryLanguages = Array.isArray(entry.language) 
-        ? entry.language.map((l) => l.toLowerCase().trim())
-        : []
+
+      const normalizedEntryLanguages = normalizeLanguage(entry.language);
+      // Check if entry has all the selected languages (AND logic)
+      // Note: filter languages come from the UI which uses normalized values
       for (const filterLanguage of filters.languages) {
-        if (!entryLanguages.includes(filterLanguage.toLowerCase().trim())) return false
+        if (!normalizedEntryLanguages.includes(filterLanguage)) return false
       }
     }
 
@@ -101,17 +102,13 @@ export function extractFilterOptions(data: MediaEntry[]) {
     if (entry.status) statuses.add(entry.status)
     if (entry.medium) mediums.add(entry.medium)
     if (entry.platform) platforms.add(entry.platform)
-    // Handle language as array (like genre) or string (for backward compatibility)
+
+    // Handle language using normalization
     if (entry.language) {
-      let langArray: string[] = []
-      if (Array.isArray(entry.language)) {
-        langArray = entry.language
-      }
-      langArray.forEach((l) => {
-        const trimmed = typeof l === 'string' ? l.trim() : String(l).trim()
-        if (trimmed) languages.add(trimmed)
-      })
+      const normalized = normalizeLanguage(entry.language)
+      normalized.forEach(l => languages.add(l))
     }
+
     // Handle genre - check for array
     if (entry.genre) {
       let genreArray: string[] = []

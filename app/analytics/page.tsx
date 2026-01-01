@@ -12,6 +12,7 @@ import { Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
+import { AnalyticsSkeleton } from "@/components/skeletons"
 import { PageHeader } from "@/components/page-header"
 
 export default function AnalyticsPage() {
@@ -27,7 +28,7 @@ export default function AnalyticsPage() {
       try {
         setLoading(true)
         setError(null)
-        
+
         // Use optimized server action instead of direct Supabase query
         const result = await getEntries()
 
@@ -36,11 +37,11 @@ export default function AnalyticsPage() {
         if (!result.success) {
           throw new Error(result.error || "Failed to load entries")
         }
-        
+
         setEntries(result.data || [])
       } catch (err) {
         if (!isMounted) return
-        
+
         console.error("Failed to fetch entries:", err)
         const errorMessage = err instanceof Error ? err.message : "Failed to load entries"
         setError(errorMessage)
@@ -70,11 +71,11 @@ export default function AnalyticsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-muted-foreground">
-          <Loader2 className="h-8 w-8 animate-spin" />
-          <p className="text-sm font-mono">Loading analytics...</p>
-        </div>
+      <div className="min-h-screen bg-background">
+        <PageHeader title="Analytics" />
+        <main className="p-4 sm:p-6">
+          <AnalyticsSkeleton />
+        </main>
       </div>
     )
   }

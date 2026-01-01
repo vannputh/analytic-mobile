@@ -157,10 +157,10 @@ export default function ImportPage() {
           // Handle my_rating - check multiple possible field names
           const myRating = row.my_rating ?? row["my rating"] ?? row["My Rating"] ?? row["MY_RATING"] ?? null
           // Parse rating if it's a string
-          const parsedMyRating = myRating !== null && myRating !== undefined 
+          const parsedMyRating = myRating !== null && myRating !== undefined
             ? (typeof myRating === "string" ? parseFloat(myRating) : myRating)
             : null
-          
+
           // Format season - normalize to "Season X" format if it's a number
           let formattedSeason = row.season || null
           if (formattedSeason) {
@@ -197,8 +197,8 @@ export default function ImportPage() {
             title: row.title || "",
             type: row.type || null,
             season: formattedSeason,
-            language: row.language && Array.isArray(row.language) ? row.language : 
-                      row.language ? row.language.split(",").map((l: string) => l.trim()).filter(Boolean) : null,
+            language: row.language && Array.isArray(row.language) ? row.language :
+              row.language ? row.language.split(",").map((l: string) => l.trim()).filter(Boolean) : null,
             status: row.status || null,
             my_rating: parsedMyRating,
             rating: row.rating ?? null,
@@ -210,8 +210,8 @@ export default function ImportPage() {
             medium: row.medium || null,
             episodes: row.episodes ? parseInt(row.episodes.toString()) : null,
             length: row.length || null,
-            genre: row.genre && Array.isArray(row.genre) ? row.genre : 
-                   row.genre ? row.genre.split(",").map((g: string) => g.trim()).filter(Boolean) : null,
+            genre: row.genre && Array.isArray(row.genre) ? row.genre :
+              row.genre ? row.genre.split(",").map((g: string) => g.trim()).filter(Boolean) : null,
             price: row.price ? parseFloat(row.price.toString()) : null,
             poster_url: row.poster_url || null,
             imdb_id: row.imdb_id || null,
@@ -221,7 +221,7 @@ export default function ImportPage() {
       setCleanedData(cleaned)
       setTotalRows(cleaned.length)
       setPreviewData(cleaned.slice(0, 10))
-      
+
       if (result.errors && result.errors.length > 0) {
         toast.warning(`Cleaned ${cleaned.length} rows. ${result.errors.length} rows had issues.`)
       } else {
@@ -267,13 +267,13 @@ export default function ImportPage() {
             .from("media_entries")
             .select("id")
             .eq("title", entry.title)
-          
+
           if (entry.season) {
             query = query.eq("season", entry.season)
           } else {
             query = query.is("season", null)
           }
-          
+
           const { data: existing } = await query.maybeSingle()
 
           if (existing) {
@@ -311,7 +311,7 @@ export default function ImportPage() {
       setImportResults({ success: successCount + updatedCount, failed: failedCount })
 
       if (successCount > 0 || updatedCount > 0) {
-        const message = updatedCount > 0 
+        const message = updatedCount > 0
           ? `Imported ${successCount} new entries, updated ${updatedCount} existing entries`
           : `Imported ${successCount} entries`
         toast.success(message)
@@ -336,7 +336,7 @@ export default function ImportPage() {
 
     setFetching(true)
     setFetchProgress({ current: 0, total: cleanedData.length })
-    
+
     const updatedData = [...cleanedData]
     let successCount = 0
     let failedCount = 0
@@ -345,7 +345,7 @@ export default function ImportPage() {
       // Fetch metadata for each item sequentially to avoid rate limiting
       for (let i = 0; i < updatedData.length; i++) {
         const entry = updatedData[i]
-        
+
         // Skip if already has most metadata fields
         if (entry.poster_url && entry.genre && entry.average_rating) {
           setFetchProgress({ current: i + 1, total: updatedData.length })
@@ -360,7 +360,7 @@ export default function ImportPage() {
         try {
           // Build URL with title and season if provided
           let url = `/api/metadata?title=${encodeURIComponent(entry.title.trim())}`
-          
+
           // Pass medium parameter for books (Google Books API)
           if (entry.medium === "Book") {
             url += `&medium=${encodeURIComponent(entry.medium)}`
@@ -375,19 +375,19 @@ export default function ImportPage() {
               url += `&type=${omdbType}`
             }
           }
-          
+
           if (entry.season) {
             url += `&season=${encodeURIComponent(entry.season)}`
           }
-          
+
           const response = await fetch(url)
-          
+
           if (response.ok) {
             const meta = await response.json()
-            
+
             // Update title with the correct full title from metadata
             if (meta.title) updatedData[i].title = meta.title
-            
+
             // Update entry with fetched metadata (only if field is empty)
             if (meta.type && !entry.type) updatedData[i].type = meta.type
             if (meta.genre && !entry.genre) updatedData[i].genre = Array.isArray(meta.genre) ? meta.genre : meta.genre.split(",").map((g: string) => g.trim()).filter(Boolean)
@@ -399,7 +399,7 @@ export default function ImportPage() {
             // Only update season if it wasn't already set (preserve user's season input)
             if (meta.season && !entry.season) updatedData[i].season = meta.season
             if (meta.imdb_id && !entry.imdb_id) updatedData[i].imdb_id = meta.imdb_id
-            
+
             successCount++
           } else {
             failedCount++
@@ -410,7 +410,7 @@ export default function ImportPage() {
         }
 
         setFetchProgress({ current: i + 1, total: updatedData.length })
-        
+
         // Small delay to avoid rate limiting (OMDB free tier: 1000 requests/day)
         if (i < updatedData.length - 1) {
           await new Promise(resolve => setTimeout(resolve, 200))
@@ -419,7 +419,7 @@ export default function ImportPage() {
 
       setCleanedData(updatedData)
       setPreviewData(updatedData.slice(0, 10))
-      
+
       if (successCount > 0) {
         toast.success(`Fetched metadata for ${successCount} items${failedCount > 0 ? `, ${failedCount} failed` : ""}`)
       } else if (failedCount > 0) {
@@ -449,7 +449,7 @@ export default function ImportPage() {
     <main className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b">
-        <div className="flex items-center justify-between px-4 py-3">
+        <div className="flex items-center justify-between px-3 sm:px-4 py-2 sm:py-3">
           <div className="flex items-center gap-3">
             <Button variant="ghost" size="icon" onClick={() => router.push("/analytics")}>
               <ArrowLeft className="h-4 w-4" />
@@ -460,9 +460,9 @@ export default function ImportPage() {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto p-6 space-y-6">
+      <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
         {/* File Upload */}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <input
             ref={fileInputRef}
             type="file"
@@ -507,7 +507,7 @@ export default function ImportPage() {
         </div>
 
         {/* Actions */}
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Button
             onClick={importData}
             disabled={cleaning || importing || fetching || cleanedData.length === 0}
@@ -589,8 +589,8 @@ export default function ImportPage() {
                       {row.my_rating ?? row.rating ?? "-"}
                     </TableCell>
                     <TableCell className="text-xs">
-                      {row.genre && Array.isArray(row.genre) 
-                        ? row.genre.join(", ") 
+                      {row.genre && Array.isArray(row.genre)
+                        ? row.genre.join(", ")
                         : row.genre || "-"}
                     </TableCell>
                     <TableCell className="text-xs">{row.platform || "-"}</TableCell>

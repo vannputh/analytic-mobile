@@ -49,9 +49,9 @@ export function Filters({
   onGenreChange,
 }: FiltersProps) {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
-        <div className="space-y-2 lg:col-span-2">
+    <div className="space-y-3 sm:space-y-4">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="space-y-2 sm:col-span-2 lg:col-span-2">
           <Label htmlFor="search">Search</Label>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -126,7 +126,7 @@ export function Filters({
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-3 sm:gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5">
         <div className="space-y-2">
           <Label htmlFor="medium">Medium</Label>
           <Select value={medium} onValueChange={onMediumChange}>

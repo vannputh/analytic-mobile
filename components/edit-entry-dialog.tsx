@@ -1,7 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { MediaEntry } from "@/lib/database.types"
+import { MediaEntry, EpisodeWatchRecord } from "@/lib/database.types"
 import { updateEntry, getUniqueFieldValues, CreateEntryInput } from "@/lib/actions"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -24,7 +24,11 @@ import {
 import { Loader2, Upload, Download } from "lucide-react"
 import { toast } from "sonner"
 import { SafeImage } from "@/components/ui/safe-image"
-import { differenceInDays, parseISO, isValid } from "date-fns"
+import { differenceInDays, parseISO, isValid, format } from "date-fns"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Calendar } from "@/components/ui/calendar"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface EditEntryDialogProps {
   entry: MediaEntry | null
@@ -106,6 +110,25 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
   })
   const [genreInput, setGenreInput] = useState("")
   const [languageInput, setLanguageInput] = useState("")
+  const [episodeHistory, setEpisodeHistory] = useState<EpisodeWatchRecord[]>([])
+  const [newEpisodeNumber, setNewEpisodeNumber] = useState("")
+  const [newEpisodeDate, setNewEpisodeDate] = useState<Date | undefined>(undefined)
+  const [isAddingEpisode, setIsAddingEpisode] = useState(false)
+
+  // Parse episode history from JSON
+  const parseEpisodeHistory = (data: unknown): EpisodeWatchRecord[] => {
+    if (!data) return []
+    if (Array.isArray(data)) {
+      return data.filter(
+        (item): item is EpisodeWatchRecord =>
+          typeof item === "object" &&
+          item !== null &&
+          typeof item.episode === "number" &&
+          typeof item.watched_at === "string"
+      )
+    }
+    return []
+  }
 
   // Fetch dropdown options
   useEffect(() => {
@@ -163,6 +186,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
       })
       setGenreInput(genreArray ? genreArray.join(", ") : "")
       setLanguageInput(languageArray ? languageArray.join(", ") : "")
+      setEpisodeHistory(parseEpisodeHistory(entry.episode_history))
     }
   }, [open, entry])
 
@@ -221,6 +245,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
         time_taken: formData.time_taken?.trim() || null,
         poster_url: formData.poster_url?.trim() || null,
         imdb_id: formData.imdb_id?.trim() || null,
+        episode_history: episodeHistory.length > 0 ? episodeHistory as unknown as import("@/lib/database.types").Json : null,
       }
 
       const result = await updateEntry(entry.id, entryData)
@@ -334,7 +359,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
     const isbn = detectISBN(formData.imdb_id)
     const isImdbId = detectIMDbID(formData.imdb_id)
     const hasTitle = formData.title?.trim()
-    
+
     if (!hasTitle && !isbn && !isImdbId) {
       toast.error("Please enter a title, ISBN, or IMDb ID first")
       return
@@ -344,7 +369,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
     setFetchingSource(source)
     try {
       let url = ""
-      
+
       if (isbn || isImdbId) {
         url = `/api/metadata?imdb_id=${encodeURIComponent(formData.imdb_id!.trim())}&source=${source}`
         if (hasTitle && formData.title) {
@@ -353,7 +378,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
       } else {
         url = `/api/metadata?title=${encodeURIComponent((formData.title || "").trim())}&source=${source}`
       }
-      
+
       if (formData.medium) {
         if (formData.medium === "Book") {
           url += `&medium=${encodeURIComponent(formData.medium)}`
@@ -370,13 +395,13 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
       } else if (isbn) {
         url += `&medium=Book`
       }
-      
+
       if (formData.season) {
         url += `&season=${encodeURIComponent(formData.season)}`
       }
 
       const response = await fetch(url)
-      
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || "Failed to fetch metadata")
@@ -385,7 +410,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
       const metadata = await response.json()
 
       // Check if there's existing data that would be overwritten
-      const hasExistingData = 
+      const hasExistingData =
         formData.title ||
         formData.poster_url ||
         formData.genre ||
@@ -431,17 +456,17 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
   }
 
   const applyMetadata = (metadata: any, fieldsToOverride?: Record<string, boolean>) => {
-    const fetchedGenres = metadata.genre 
-      ? (Array.isArray(metadata.genre) 
-          ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
-          : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
+    const fetchedGenres = metadata.genre
+      ? (Array.isArray(metadata.genre)
+        ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
+        : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
       : []
-    const fetchedLanguages = metadata.language 
+    const fetchedLanguages = metadata.language
       ? (Array.isArray(metadata.language)
-          ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
-          : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
+        ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
+        : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
       : []
-    
+
     setFormData((prev) => {
       // Handle genres - merge if not overriding, replace if overriding
       let finalGenres: string[] = []
@@ -463,7 +488,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
         })
         finalGenres = mergedGenres
       }
-      
+
       // Handle languages - merge if not overriding, replace if overriding
       let finalLanguages: string[] = []
       if (fieldsToOverride?.language && fetchedLanguages.length > 0) {
@@ -484,12 +509,12 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
         })
         finalLanguages = mergedLanguages
       }
-      
+
       const genreText = finalGenres.length > 0 ? finalGenres.join(", ") : ""
       const languageText = finalLanguages.length > 0 ? finalLanguages.join(", ") : ""
       setGenreInput(genreText)
       setLanguageInput(languageText)
-      
+
       return {
         ...prev,
         title: (fieldsToOverride?.title && metadata.title) ? metadata.title : prev.title,
@@ -518,6 +543,44 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
     setPendingMetadata(null)
   }
 
+  // Episode history management
+  const handleAddEpisode = () => {
+    const epNum = parseInt(newEpisodeNumber)
+    if (isNaN(epNum) || epNum <= 0) {
+      toast.error("Please enter a valid episode number")
+      return
+    }
+    if (!newEpisodeDate) {
+      toast.error("Please select a date")
+      return
+    }
+    // Check if episode already exists
+    if (episodeHistory.some(ep => ep.episode === epNum)) {
+      toast.error(`Episode ${epNum} already has a watch date`)
+      return
+    }
+    const newRecord: EpisodeWatchRecord = {
+      episode: epNum,
+      watched_at: newEpisodeDate.toISOString(),
+    }
+    setEpisodeHistory(prev => [...prev, newRecord].sort((a, b) => a.episode - b.episode))
+    setNewEpisodeNumber("")
+    setNewEpisodeDate(undefined)
+    setIsAddingEpisode(false)
+    toast.success(`Added Episode ${epNum}`)
+  }
+
+  const handleRemoveEpisode = (episodeNum: number) => {
+    setEpisodeHistory(prev => prev.filter(ep => ep.episode !== episodeNum))
+    toast.success(`Removed Episode ${episodeNum}`)
+  }
+
+  const handleUpdateEpisodeDate = (episodeNum: number, newDate: Date) => {
+    setEpisodeHistory(prev => prev.map(ep =>
+      ep.episode === episodeNum ? { ...ep, watched_at: newDate.toISOString() } : ep
+    ))
+  }
+
   if (!entry) return null
 
   return (
@@ -529,535 +592,681 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
             Update the entry details. Changes are saved immediately.
           </DialogDescription>
         </DialogHeader>
-        <div className="flex-1 overflow-y-auto px-6 min-h-0">
-          <form onSubmit={handleSubmit} className="space-y-6 pb-4">
-            {/* Title - Required */}
-            <div className="space-y-2">
-              <Label htmlFor="edit-title" className="text-sm font-mono">
-                Title <span className="text-destructive">*</span>
-              </Label>
-              <div className="flex gap-2">
-                <Input
-                  id="edit-title"
-                  value={formData.title || ""}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                  placeholder="Enter title"
-                  required
-                  className="flex-1"
-                />
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleFetchMetadata("omdb")}
-                    disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
-                  >
-                    {fetchingMetadata && fetchingSource === "omdb" ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Fetching...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        OMDB
-                      </>
-                    )}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleFetchMetadata("tmdb")}
-                    disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
-                  >
-                    {fetchingMetadata && fetchingSource === "tmdb" ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Fetching...
-                      </>
-                    ) : (
-                      <>
-                        <Download className="h-4 w-4 mr-2" />
-                        TMDB
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            </div>
-
-            {/* Medium and Status */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <Tabs defaultValue="details" className="flex-1 flex flex-col min-h-0">
+          <TabsList className="mx-6 mb-4 grid w-auto grid-cols-2">
+            <TabsTrigger value="details">Details</TabsTrigger>
+            <TabsTrigger value="advanced">Advanced</TabsTrigger>
+          </TabsList>
+          <TabsContent value="details" className="flex-1 overflow-y-auto px-6 min-h-0 mt-0">
+            <form onSubmit={handleSubmit} className="space-y-6 pb-4">
+              {/* Title - Required */}
               <div className="space-y-2">
-                <Label htmlFor="edit-medium" className="text-sm font-mono">
-                  Medium
-                </Label>
-                {showNewInput.medium ? (
-                  <div className="flex gap-2">
-                    <Input
-                      id="edit-medium"
-                      value={newValue.medium}
-                      onChange={(e) => setNewValue({ ...newValue, medium: e.target.value })}
-                      placeholder="Enter new medium"
-                      onBlur={() => {
-                        if (newValue.medium.trim()) {
-                          const trimmedValue = newValue.medium.trim()
-                          setFormData({ ...formData, medium: trimmedValue })
-                          setDropdownOptions((prev: typeof dropdownOptions) => ({
-                            ...prev,
-                            mediums: prev.mediums.includes(trimmedValue) ? prev.mediums : [...prev.mediums, trimmedValue]
-                          }))
-                          setShowNewInput({ ...showNewInput, medium: false })
-                          setNewValue({ ...newValue, medium: "" })
-                        } else {
-                          setShowNewInput({ ...showNewInput, medium: false })
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.currentTarget.blur()
-                        }
-                      }}
-                      autoFocus
-                    />
-                  </div>
-                ) : (
-                  <Select
-                    value={formData.medium || "__none__"}
-                    onValueChange={(value) => {
-                      if (value === "__new__") {
-                        setShowNewInput({ ...showNewInput, medium: true })
-                      } else {
-                        setFormData({ ...formData, medium: value === "__none__" ? null : value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select medium" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {dropdownOptions.mediums.map((medium) => (
-                        <SelectItem key={medium} value={medium}>
-                          {medium}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="__new__">+ New</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-status" className="text-sm font-mono">
-                  Status
-                </Label>
-                {showNewInput.status ? (
-                  <div className="flex gap-2">
-                    <Input
-                      id="edit-status"
-                      value={newValue.status}
-                      onChange={(e) => setNewValue({ ...newValue, status: e.target.value })}
-                      placeholder="Enter new status"
-                      onBlur={() => {
-                        if (newValue.status.trim()) {
-                          const trimmedValue = newValue.status.trim()
-                          setFormData({ ...formData, status: trimmedValue })
-                          setDropdownOptions((prev: typeof dropdownOptions) => ({
-                            ...prev,
-                            statuses: prev.statuses.includes(trimmedValue) ? prev.statuses : [...prev.statuses, trimmedValue]
-                          }))
-                          setShowNewInput({ ...showNewInput, status: false })
-                          setNewValue({ ...newValue, status: "" })
-                        } else {
-                          setShowNewInput({ ...showNewInput, status: false })
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.currentTarget.blur()
-                        }
-                      }}
-                      autoFocus
-                    />
-                  </div>
-                ) : (
-                  <Select
-                    value={formData.status || "__none__"}
-                    onValueChange={(value) => {
-                      if (value === "__new__") {
-                        setShowNewInput({ ...showNewInput, status: true })
-                      } else {
-                        setFormData({ ...formData, status: value === "__none__" ? null : value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select status" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {dropdownOptions.statuses.map((status) => (
-                        <SelectItem key={status} value={status}>
-                          {status}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="__new__">+ New</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-            </div>
-
-            {/* Type, Season, Language */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-type" className="text-sm font-mono">
-                  Type
-                </Label>
-                {showNewInput.type ? (
-                  <div className="flex gap-2">
-                    <Input
-                      id="edit-type"
-                      value={newValue.type}
-                      onChange={(e) => setNewValue({ ...newValue, type: e.target.value })}
-                      placeholder="Enter new type"
-                      onBlur={() => {
-                        if (newValue.type.trim()) {
-                          const trimmedValue = newValue.type.trim()
-                          setFormData({ ...formData, type: trimmedValue })
-                          setDropdownOptions((prev: typeof dropdownOptions) => ({
-                            ...prev,
-                            types: prev.types.includes(trimmedValue) ? prev.types : [...prev.types, trimmedValue]
-                          }))
-                          setShowNewInput({ ...showNewInput, type: false })
-                          setNewValue({ ...newValue, type: "" })
-                        } else {
-                          setShowNewInput({ ...showNewInput, type: false })
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.currentTarget.blur()
-                        }
-                      }}
-                      autoFocus
-                    />
-                  </div>
-                ) : (
-                  <Select
-                    value={formData.type || "__none__"}
-                    onValueChange={(value) => {
-                      if (value === "__new__") {
-                        setShowNewInput({ ...showNewInput, type: true })
-                      } else {
-                        setFormData({ ...formData, type: value === "__none__" ? null : value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {dropdownOptions.types.map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="__new__">+ New</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-season" className="text-sm font-mono">
-                  Season
-                </Label>
-                <Input
-                  id="edit-season"
-                  value={formData.season || ""}
-                  onChange={(e) => setFormData({ ...formData, season: e.target.value })}
-                  placeholder="Enter season"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-language" className="text-sm font-mono">
-                  Language
-                </Label>
-                <Input
-                  id="edit-language"
-                  value={languageInput}
-                  onChange={(e) => handleLanguageChange(e.target.value)}
-                  placeholder="Comma-separated languages"
-                />
-              </div>
-            </div>
-
-            {/* Episodes, Length, Price */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-episodes" className="text-sm font-mono">
-                  Episodes
-                </Label>
-                <Input
-                  id="edit-episodes"
-                  type="number"
-                  value={formData.episodes || ""}
-                  onChange={(e) => setFormData({ ...formData, episodes: e.target.value ? parseInt(e.target.value) : null })}
-                  placeholder="Number of episodes"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-length" className="text-sm font-mono">
-                  Length
-                </Label>
-                <Input
-                  id="edit-length"
-                  value={formData.length || ""}
-                  onChange={(e) => setFormData({ ...formData, length: e.target.value })}
-                  placeholder="e.g., 120 min"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-price" className="text-sm font-mono">
-                  Price
-                </Label>
-                <Input
-                  id="edit-price"
-                  type="number"
-                  step="0.01"
-                  value={formData.price || ""}
-                  onChange={(e) => setFormData({ ...formData, price: e.target.value ? parseFloat(e.target.value) : null })}
-                  placeholder="Price"
-                />
-              </div>
-            </div>
-
-            {/* Platform, Genre */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-platform" className="text-sm font-mono">
-                  Platform
-                </Label>
-                {showNewInput.platform ? (
-                  <div className="flex gap-2">
-                    <Input
-                      id="edit-platform"
-                      value={newValue.platform}
-                      onChange={(e) => setNewValue({ ...newValue, platform: e.target.value })}
-                      placeholder="Enter new platform"
-                      onBlur={() => {
-                        if (newValue.platform.trim()) {
-                          const trimmedValue = newValue.platform.trim()
-                          setFormData({ ...formData, platform: trimmedValue })
-                          setDropdownOptions((prev: typeof dropdownOptions) => ({
-                            ...prev,
-                            platforms: prev.platforms.includes(trimmedValue) ? prev.platforms : [...prev.platforms, trimmedValue]
-                          }))
-                          setShowNewInput({ ...showNewInput, platform: false })
-                          setNewValue({ ...newValue, platform: "" })
-                        } else {
-                          setShowNewInput({ ...showNewInput, platform: false })
-                        }
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") {
-                          e.currentTarget.blur()
-                        }
-                      }}
-                      autoFocus
-                    />
-                  </div>
-                ) : (
-                  <Select
-                    value={formData.platform || "__none__"}
-                    onValueChange={(value) => {
-                      if (value === "__new__") {
-                        setShowNewInput({ ...showNewInput, platform: true })
-                      } else {
-                        setFormData({ ...formData, platform: value === "__none__" ? null : value })
-                      }
-                    }}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select platform" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">None</SelectItem>
-                      {dropdownOptions.platforms.map((platform) => (
-                        <SelectItem key={platform} value={platform}>
-                          {platform}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="__new__">+ New</SelectItem>
-                    </SelectContent>
-                  </Select>
-                )}
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-genre" className="text-sm font-mono">
-                  Genre
-                </Label>
-                <Input
-                  id="edit-genre"
-                  value={genreInput}
-                  onChange={(e) => handleGenreChange(e.target.value)}
-                  placeholder="Comma-separated genres"
-                />
-              </div>
-            </div>
-
-            {/* Ratings */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-my-rating" className="text-sm font-mono">
-                  My Rating
-                </Label>
-                <Input
-                  id="edit-my-rating"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={formData.my_rating || ""}
-                  onChange={(e) => setFormData({ ...formData, my_rating: e.target.value ? parseFloat(e.target.value) : null })}
-                  placeholder="0-10"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-average-rating" className="text-sm font-mono">
-                  Average Rating
-                </Label>
-                <Input
-                  id="edit-average-rating"
-                  type="number"
-                  step="0.1"
-                  min="0"
-                  max="10"
-                  value={formData.average_rating || ""}
-                  onChange={(e) => setFormData({ ...formData, average_rating: e.target.value ? parseFloat(e.target.value) : null })}
-                  placeholder="0-10"
-                />
-              </div>
-            </div>
-
-            {/* Dates */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-start-date" className="text-sm font-mono">
-                  Start Date
-                </Label>
-                <Input
-                  id="edit-start-date"
-                  type="date"
-                  value={formData.start_date || ""}
-                  onChange={(e) => setFormData({ ...formData, start_date: e.target.value || null })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-finish-date" className="text-sm font-mono">
-                  Finish Date
-                </Label>
-                <Input
-                  id="edit-finish-date"
-                  type="date"
-                  value={formData.finish_date || ""}
-                  onChange={(e) => setFormData({ ...formData, finish_date: e.target.value || null })}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-time-taken" className="text-sm font-mono">
-                  Time Taken
-                </Label>
-                <Input
-                  id="edit-time-taken"
-                  value={formData.time_taken || ""}
-                  onChange={(e) => setFormData({ ...formData, time_taken: e.target.value })}
-                  placeholder="Auto-calculated from dates"
-                />
-              </div>
-            </div>
-
-            {/* Poster URL and IMDb ID */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-poster-url" className="text-sm font-mono">
-                  Poster URL
+                <Label htmlFor="edit-title" className="text-sm font-mono">
+                  Title <span className="text-destructive">*</span>
                 </Label>
                 <div className="flex gap-2">
                   <Input
-                    id="edit-poster-url"
-                    type="url"
-                    value={formData.poster_url || ""}
-                    onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
-                    placeholder="https://..."
+                    id="edit-title"
+                    value={formData.title || ""}
+                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    placeholder="Enter title"
+                    required
                     className="flex-1"
                   />
-                  <input
-                    type="file"
-                    id="edit-image-upload"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                    disabled={uploadingImage}
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleFetchMetadata("omdb")}
+                      disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
+                    >
+                      {fetchingMetadata && fetchingSource === "omdb" ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Fetching...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          OMDB
+                        </>
+                      )}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleFetchMetadata("tmdb")}
+                      disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
+                    >
+                      {fetchingMetadata && fetchingSource === "tmdb" ? (
+                        <>
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                          Fetching...
+                        </>
+                      ) : (
+                        <>
+                          <Download className="h-4 w-4 mr-2" />
+                          TMDB
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Medium and Status */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-medium" className="text-sm font-mono">
+                    Medium
+                  </Label>
+                  {showNewInput.medium ? (
+                    <div className="flex gap-2">
+                      <Input
+                        id="edit-medium"
+                        value={newValue.medium}
+                        onChange={(e) => setNewValue({ ...newValue, medium: e.target.value })}
+                        placeholder="Enter new medium"
+                        onBlur={() => {
+                          if (newValue.medium.trim()) {
+                            const trimmedValue = newValue.medium.trim()
+                            setFormData({ ...formData, medium: trimmedValue })
+                            setDropdownOptions((prev: typeof dropdownOptions) => ({
+                              ...prev,
+                              mediums: prev.mediums.includes(trimmedValue) ? prev.mediums : [...prev.mediums, trimmedValue]
+                            }))
+                            setShowNewInput({ ...showNewInput, medium: false })
+                            setNewValue({ ...newValue, medium: "" })
+                          } else {
+                            setShowNewInput({ ...showNewInput, medium: false })
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur()
+                          }
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                  ) : (
+                    <Select
+                      value={formData.medium || "__none__"}
+                      onValueChange={(value) => {
+                        if (value === "__new__") {
+                          setShowNewInput({ ...showNewInput, medium: true })
+                        } else {
+                          setFormData({ ...formData, medium: value === "__none__" ? null : value })
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select medium" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {dropdownOptions.mediums.map((medium) => (
+                          <SelectItem key={medium} value={medium}>
+                            {medium}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__new__">+ New</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-status" className="text-sm font-mono">
+                    Status
+                  </Label>
+                  {showNewInput.status ? (
+                    <div className="flex gap-2">
+                      <Input
+                        id="edit-status"
+                        value={newValue.status}
+                        onChange={(e) => setNewValue({ ...newValue, status: e.target.value })}
+                        placeholder="Enter new status"
+                        onBlur={() => {
+                          if (newValue.status.trim()) {
+                            const trimmedValue = newValue.status.trim()
+                            setFormData({ ...formData, status: trimmedValue })
+                            setDropdownOptions((prev: typeof dropdownOptions) => ({
+                              ...prev,
+                              statuses: prev.statuses.includes(trimmedValue) ? prev.statuses : [...prev.statuses, trimmedValue]
+                            }))
+                            setShowNewInput({ ...showNewInput, status: false })
+                            setNewValue({ ...newValue, status: "" })
+                          } else {
+                            setShowNewInput({ ...showNewInput, status: false })
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur()
+                          }
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                  ) : (
+                    <Select
+                      value={formData.status || "__none__"}
+                      onValueChange={(value) => {
+                        if (value === "__new__") {
+                          setShowNewInput({ ...showNewInput, status: true })
+                        } else {
+                          setFormData({ ...formData, status: value === "__none__" ? null : value })
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {dropdownOptions.statuses.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {status}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__new__">+ New</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              {/* Type, Season, Language */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-type" className="text-sm font-mono">
+                    Type
+                  </Label>
+                  {showNewInput.type ? (
+                    <div className="flex gap-2">
+                      <Input
+                        id="edit-type"
+                        value={newValue.type}
+                        onChange={(e) => setNewValue({ ...newValue, type: e.target.value })}
+                        placeholder="Enter new type"
+                        onBlur={() => {
+                          if (newValue.type.trim()) {
+                            const trimmedValue = newValue.type.trim()
+                            setFormData({ ...formData, type: trimmedValue })
+                            setDropdownOptions((prev: typeof dropdownOptions) => ({
+                              ...prev,
+                              types: prev.types.includes(trimmedValue) ? prev.types : [...prev.types, trimmedValue]
+                            }))
+                            setShowNewInput({ ...showNewInput, type: false })
+                            setNewValue({ ...newValue, type: "" })
+                          } else {
+                            setShowNewInput({ ...showNewInput, type: false })
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur()
+                          }
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                  ) : (
+                    <Select
+                      value={formData.type || "__none__"}
+                      onValueChange={(value) => {
+                        if (value === "__new__") {
+                          setShowNewInput({ ...showNewInput, type: true })
+                        } else {
+                          setFormData({ ...formData, type: value === "__none__" ? null : value })
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {dropdownOptions.types.map((type) => (
+                          <SelectItem key={type} value={type}>
+                            {type}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__new__">+ New</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-season" className="text-sm font-mono">
+                    Season
+                  </Label>
+                  <Input
+                    id="edit-season"
+                    value={formData.season || ""}
+                    onChange={(e) => setFormData({ ...formData, season: e.target.value })}
+                    placeholder="Enter season"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-language" className="text-sm font-mono">
+                    Language
+                  </Label>
+                  <Input
+                    id="edit-language"
+                    value={languageInput}
+                    onChange={(e) => handleLanguageChange(e.target.value)}
+                    placeholder="Comma-separated languages"
+                  />
+                </div>
+              </div>
+
+              {/* Episodes, Length, Price */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-episodes" className="text-sm font-mono">
+                    Episodes
+                  </Label>
+                  <Input
+                    id="edit-episodes"
+                    type="number"
+                    value={formData.episodes || ""}
+                    onChange={(e) => setFormData({ ...formData, episodes: e.target.value ? parseInt(e.target.value) : null })}
+                    placeholder="Number of episodes"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-length" className="text-sm font-mono">
+                    Length
+                  </Label>
+                  <Input
+                    id="edit-length"
+                    value={formData.length || ""}
+                    onChange={(e) => setFormData({ ...formData, length: e.target.value })}
+                    placeholder="e.g., 120 min"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-price" className="text-sm font-mono">
+                    Price
+                  </Label>
+                  <Input
+                    id="edit-price"
+                    type="number"
+                    step="0.01"
+                    value={formData.price || ""}
+                    onChange={(e) => setFormData({ ...formData, price: e.target.value ? parseFloat(e.target.value) : null })}
+                    placeholder="Price"
+                  />
+                </div>
+              </div>
+
+              {/* Platform, Genre */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-platform" className="text-sm font-mono">
+                    Platform
+                  </Label>
+                  {showNewInput.platform ? (
+                    <div className="flex gap-2">
+                      <Input
+                        id="edit-platform"
+                        value={newValue.platform}
+                        onChange={(e) => setNewValue({ ...newValue, platform: e.target.value })}
+                        placeholder="Enter new platform"
+                        onBlur={() => {
+                          if (newValue.platform.trim()) {
+                            const trimmedValue = newValue.platform.trim()
+                            setFormData({ ...formData, platform: trimmedValue })
+                            setDropdownOptions((prev: typeof dropdownOptions) => ({
+                              ...prev,
+                              platforms: prev.platforms.includes(trimmedValue) ? prev.platforms : [...prev.platforms, trimmedValue]
+                            }))
+                            setShowNewInput({ ...showNewInput, platform: false })
+                            setNewValue({ ...newValue, platform: "" })
+                          } else {
+                            setShowNewInput({ ...showNewInput, platform: false })
+                          }
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            e.currentTarget.blur()
+                          }
+                        }}
+                        autoFocus
+                      />
+                    </div>
+                  ) : (
+                    <Select
+                      value={formData.platform || "__none__"}
+                      onValueChange={(value) => {
+                        if (value === "__new__") {
+                          setShowNewInput({ ...showNewInput, platform: true })
+                        } else {
+                          setFormData({ ...formData, platform: value === "__none__" ? null : value })
+                        }
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select platform" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="__none__">None</SelectItem>
+                        {dropdownOptions.platforms.map((platform) => (
+                          <SelectItem key={platform} value={platform}>
+                            {platform}
+                          </SelectItem>
+                        ))}
+                        <SelectItem value="__new__">+ New</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-genre" className="text-sm font-mono">
+                    Genre
+                  </Label>
+                  <Input
+                    id="edit-genre"
+                    value={genreInput}
+                    onChange={(e) => handleGenreChange(e.target.value)}
+                    placeholder="Comma-separated genres"
+                  />
+                </div>
+              </div>
+
+              {/* Ratings */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-my-rating" className="text-sm font-mono">
+                    My Rating
+                  </Label>
+                  <Input
+                    id="edit-my-rating"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={formData.my_rating || ""}
+                    onChange={(e) => setFormData({ ...formData, my_rating: e.target.value ? parseFloat(e.target.value) : null })}
+                    placeholder="0-10"
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-average-rating" className="text-sm font-mono">
+                    Average Rating
+                  </Label>
+                  <Input
+                    id="edit-average-rating"
+                    type="number"
+                    step="0.1"
+                    min="0"
+                    max="10"
+                    value={formData.average_rating || ""}
+                    onChange={(e) => setFormData({ ...formData, average_rating: e.target.value ? parseFloat(e.target.value) : null })}
+                    placeholder="0-10"
+                  />
+                </div>
+              </div>
+
+              {/* Dates */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-start-date" className="text-sm font-mono">
+                    Start Date
+                  </Label>
+                  <Input
+                    id="edit-start-date"
+                    type="date"
+                    value={formData.start_date || ""}
+                    onChange={(e) => setFormData({ ...formData, start_date: e.target.value || null })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-finish-date" className="text-sm font-mono">
+                    Finish Date
+                  </Label>
+                  <Input
+                    id="edit-finish-date"
+                    type="date"
+                    value={formData.finish_date || ""}
+                    onChange={(e) => setFormData({ ...formData, finish_date: e.target.value || null })}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-time-taken" className="text-sm font-mono">
+                    Time Taken
+                  </Label>
+                  <Input
+                    id="edit-time-taken"
+                    value={formData.time_taken || ""}
+                    onChange={(e) => setFormData({ ...formData, time_taken: e.target.value })}
+                    placeholder="Auto-calculated from dates"
+                  />
+                </div>
+              </div>
+
+              {/* Poster URL and IMDb ID */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-poster-url" className="text-sm font-mono">
+                    Poster URL
+                  </Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="edit-poster-url"
+                      type="url"
+                      value={formData.poster_url || ""}
+                      onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
+                      placeholder="https://..."
+                      className="flex-1"
+                    />
+                    <input
+                      type="file"
+                      id="edit-image-upload"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                      disabled={uploadingImage}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => document.getElementById('edit-image-upload')?.click()}
+                      disabled={uploadingImage}
+                      className="gap-2"
+                    >
+                      {uploadingImage ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="h-4 w-4" />
+                          Upload
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                  {formData.poster_url && (
+                    <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
+                      <SafeImage
+                        src={formData.poster_url}
+                        alt="Poster preview"
+                        fill
+                        className="object-contain"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-imdb-id" className="text-sm font-mono">
+                    IMDb ID
+                  </Label>
+                  <Input
+                    id="edit-imdb-id"
+                    value={formData.imdb_id || ""}
+                    onChange={(e) => setFormData({ ...formData, imdb_id: e.target.value })}
+                    placeholder="tt1234567"
+                  />
+                </div>
+              </div>
+            </form>
+          </TabsContent>
+          <TabsContent value="advanced" className="flex-1 overflow-y-auto px-6 min-h-0 mt-0">
+            <div className="space-y-6 pb-4">
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold">Episode Watch History</h3>
+                    <p className="text-sm text-muted-foreground">Track when you watched each episode</p>
+                  </div>
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => document.getElementById('edit-image-upload')?.click()}
-                    disabled={uploadingImage}
-                    className="gap-2"
+                    size="sm"
+                    onClick={() => {
+                      // Auto-fill with next episode number
+                      const existingEpisodes = episodeHistory.map(ep => ep.episode)
+                      let nextEp = 1
+                      while (existingEpisodes.includes(nextEp)) {
+                        nextEp++
+                      }
+                      setNewEpisodeNumber(nextEp.toString())
+                      setNewEpisodeDate(new Date())
+                      setIsAddingEpisode(true)
+                    }}
+                    disabled={isAddingEpisode}
                   >
-                    {uploadingImage ? (
-                      <>
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                        Uploading...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="h-4 w-4" />
-                        Upload
-                      </>
-                    )}
+                    Add Episode
                   </Button>
                 </div>
-                {formData.poster_url && (
-                  <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
-                    <SafeImage
-                      src={formData.poster_url}
-                      alt="Poster preview"
-                      fill
-                      className="object-contain"
-                    />
+
+                {/* Add Episode Form */}
+                {isAddingEpisode && (
+                  <div className="p-4 border rounded-xl bg-gradient-to-br from-muted/50 to-muted/20 space-y-4">
+                    <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                      <span className="h-5 w-5 rounded-full bg-primary/10 flex items-center justify-center text-xs">+</span>
+                      Add New Episode
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="new-ep-num" className="text-xs text-muted-foreground">Episode Number</Label>
+                        <Input
+                          id="new-ep-num"
+                          type="number"
+                          min="1"
+                          value={newEpisodeNumber}
+                          onChange={(e) => setNewEpisodeNumber(e.target.value)}
+                          placeholder="1"
+                          className="h-10 font-medium"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs text-muted-foreground">Watch Date</Label>
+                        <Popover>
+                          <PopoverTrigger asChild>
+                            <Button variant="outline" className="w-full h-10 justify-start font-medium">
+                              {newEpisodeDate ? format(newEpisodeDate, "MMM d, yyyy") : "Pick date"}
+                            </Button>
+                          </PopoverTrigger>
+                          <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                              mode="single"
+                              selected={newEpisodeDate}
+                              onSelect={setNewEpisodeDate}
+                              initialFocus
+                            />
+                          </PopoverContent>
+                        </Popover>
+                      </div>
+                    </div>
+                    <div className="flex gap-2 pt-2">
+                      <Button type="button" onClick={handleAddEpisode} className="flex-1">
+                        Add Episode
+                      </Button>
+                      <Button type="button" variant="outline" onClick={() => {
+                        setIsAddingEpisode(false)
+                        setNewEpisodeNumber("")
+                        setNewEpisodeDate(undefined)
+                      }}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Episode History List */}
+                {episodeHistory.length > 0 ? (
+                  <ScrollArea className="max-h-80">
+                    <div className="space-y-2">
+                      {[...episodeHistory].sort((a, b) => a.episode - b.episode).map((ep) => (
+                        <div
+                          key={ep.episode}
+                          className="flex items-center justify-between p-3 border rounded-xl bg-card hover:bg-accent/50 transition-colors group"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="h-8 w-8 rounded-lg bg-primary/10 text-primary font-bold text-sm flex items-center justify-center">
+                              {ep.episode}
+                            </span>
+                            <div className="flex flex-col">
+                              <span className="text-sm font-medium">Episode {ep.episode}</span>
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <button className="text-xs text-muted-foreground hover:text-foreground hover:underline text-left">
+                                    {format(new Date(ep.watched_at), "EEEE, MMM d, yyyy")}
+                                  </button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={new Date(ep.watched_at)}
+                                    onSelect={(date) => date && handleUpdateEpisodeDate(ep.episode, date)}
+                                    initialFocus
+                                  />
+                                </PopoverContent>
+                              </Popover>
+                            </div>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="opacity-0 group-hover:opacity-100 text-destructive hover:text-destructive hover:bg-destructive/10 transition-opacity"
+                            onClick={() => handleRemoveEpisode(ep.episode)}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </ScrollArea>
+                ) : (
+                  <div className="text-center py-12 border rounded-xl border-dashed bg-muted/20">
+                    <div className="h-12 w-12 rounded-full bg-muted/50 flex items-center justify-center mx-auto mb-3">
+                      <span className="text-2xl">📺</span>
+                    </div>
+                    <p className="font-medium text-foreground">No episodes tracked yet</p>
+                    <p className="text-sm text-muted-foreground mt-1">Click "Add Episode" to start tracking</p>
                   </div>
                 )}
               </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="edit-imdb-id" className="text-sm font-mono">
-                  IMDb ID
-                </Label>
-                <Input
-                  id="edit-imdb-id"
-                  value={formData.imdb_id || ""}
-                  onChange={(e) => setFormData({ ...formData, imdb_id: e.target.value })}
-                  placeholder="tt1234567"
-                />
-              </div>
             </div>
-          </form>
-        </div>
+          </TabsContent>
+        </Tabs>
         <DialogFooter className="flex-shrink-0 px-6 pb-6 pt-4 border-t">
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
@@ -1139,7 +1348,7 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
                         Genre
                       </label>
                       <div className="text-xs text-muted-foreground break-words">
-                        {Array.isArray(pendingMetadata.genre) 
+                        {Array.isArray(pendingMetadata.genre)
                           ? pendingMetadata.genre.join(", ")
                           : pendingMetadata.genre}
                       </div>
@@ -1248,9 +1457,9 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2 flex-shrink-0 border-t pt-4 mt-4">
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   // Select all
@@ -1269,9 +1478,9 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
               >
                 Select All
               </Button>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   // Deselect all
@@ -1295,8 +1504,8 @@ export function EditEntryDialog({ entry, open, onOpenChange, onSuccess }: EditEn
               <Button type="button" variant="outline" onClick={handleCancelOverride} className="flex-1 sm:flex-initial">
                 Cancel
               </Button>
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 onClick={handleConfirmOverride}
                 disabled={!Object.values(overrideFields).some(v => v)}
                 className="flex-1 sm:flex-initial"

@@ -45,19 +45,19 @@ export type MediaEntry = {
 
 export type Medium = 'Movie' | 'TV Show' | 'Book' | 'Theatre' | 'Live Theatre' | 'Podcast'
 
-export type Platform = 
-  | 'Netflix' 
-  | 'AppleTV' 
+export type Platform =
+  | 'Netflix'
+  | 'AppleTV'
   | 'Prime Video'
   | 'Disney+'
   | 'HBO Max'
   | 'Hulu'
-  | 'Pirated' 
+  | 'Pirated'
   | 'Cinema'
   | 'Physical'
   | 'Spotify'
   | 'YouTube'
   | 'Other'
 
-export type Status = 'In Progress' | 'Finished' | 'On Hold' | 'Dropped'
+export type Status = 'Watching' | 'Finished' | 'On Hold' | 'Dropped'
 

@@ -3,6 +3,7 @@
 import { useMemo } from "react"
 import { MediaEntry, VISUAL_MEDIA_TYPES, TEXT_MEDIA_TYPES } from "@/lib/database.types"
 import { parseDurationToMinutes, parsePages, parsePrice } from "@/lib/parsing-utils"
+import { normalizeLanguage } from "@/lib/language-utils"
 
 export interface MediaMetrics {
   // Financials
@@ -144,12 +145,11 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
         }
       }
 
-      // Language (flatten arrays, like genre)
+      // Language (normalize to handle strings and arrays)
       if (entry.language) {
-        if (Array.isArray(entry.language)) {
-          for (const l of entry.language) {
-            incrementRecord(countByLanguage, l.trim())
-          }
+        const languages = normalizeLanguage(entry.language)
+        for (const l of languages) {
+          incrementRecord(countByLanguage, l)
         }
       }
 

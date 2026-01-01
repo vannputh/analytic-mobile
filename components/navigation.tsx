@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { Plus, Upload, LogOut } from "lucide-react";
+import { Plus, LogOut, PlayCircle } from "lucide-react";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
@@ -33,20 +33,21 @@ export function Navigation() {
           </div>
           <div className="flex gap-2 items-center">
             <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/watching")}
+              className="mr-2"
+            >
+              <PlayCircle className="h-4 w-4 mr-2" />
+              Watching
+            </Button>
+            <Button
               variant="outline"
               size="sm"
               onClick={() => router.push("/add")}
             >
               <Plus className="h-4 w-4 mr-2" />
               Add
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => router.push("/import")}
-            >
-              <Upload className="h-4 w-4 mr-2" />
-              Import
             </Button>
             <ThemeToggle />
             <Button

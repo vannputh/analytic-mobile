@@ -4,6 +4,7 @@ import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { MediaEntry } from "@/lib/database.types"
 import { createEntry, updateEntry, CreateEntryInput, getUniqueFieldValues, getEntry } from "@/lib/actions"
+import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -15,7 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ThemeToggle } from "@/components/ui/theme-toggle"
+
 import {
   Dialog,
   DialogContent,
@@ -24,7 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import { ArrowLeft, Loader2, Save, Download, Upload, X } from "lucide-react"
+import { Loader2, Save, Download, Upload, X } from "lucide-react"
 import { toast } from "sonner"
 import { SafeImage } from "@/components/ui/safe-image"
 import { differenceInDays, parseISO, isValid } from "date-fns"
@@ -122,13 +123,13 @@ function AddPageContent() {
   // Fetch existing entry if editing
   useEffect(() => {
     let cancelled = false
-    
+
     async function fetchEntry() {
       if (!entryId) {
         setFetching(false)
         return
       }
-      
+
       setFetching(true)
       try {
         const result = await getEntry(entryId)
@@ -163,9 +164,9 @@ function AddPageContent() {
           }
           return null;
         })()
-        
+
         if (cancelled) return
-        
+
         setFormData({
           title: data.title || "",
           medium: data.medium || null,
@@ -200,9 +201,9 @@ function AddPageContent() {
         }
       }
     }
-    
+
     fetchEntry()
-    
+
     return () => {
       cancelled = true
     }
@@ -372,17 +373,17 @@ function AddPageContent() {
     if (!input) return null
     // Remove all non-alphanumeric characters (keep digits and X)
     const cleaned = input.trim().replace(/[^0-9X]/g, '')
-    
+
     // Check for ISBN-13 (13 digits, starting with 978 or 979)
     if (/^(978|979)\d{10}$/.test(cleaned)) {
       return cleaned
     }
-    
+
     // Check for ISBN-10 (10 digits, may end with X)
     if (/^\d{9}[\dX]$/.test(cleaned)) {
       return cleaned
     }
-    
+
     return null
   }
 
@@ -399,7 +400,7 @@ function AddPageContent() {
     const isbn = detectISBN(formData.imdb_id)
     const isImdbId = detectIMDbID(formData.imdb_id)
     const hasTitle = formData.title?.trim()
-    
+
     if (!hasTitle && !isbn && !isImdbId) {
       toast.error("Please enter a title, ISBN, or IMDb ID first")
       return
@@ -410,11 +411,11 @@ function AddPageContent() {
     try {
       // Build URL with search query and optional parameters
       let url = ""
-      
+
       if (isbn || isImdbId) {
         // If ISBN or IMDb ID is provided, pass it as imdb_id parameter
         url = `/api/metadata?imdb_id=${encodeURIComponent(formData.imdb_id!.trim())}&source=${source}`
-        
+
         // Also pass title if available (for fallback or additional context)
         if (hasTitle) {
           url += `&title=${encodeURIComponent(hasTitle)}`
@@ -423,7 +424,7 @@ function AddPageContent() {
         // Use title for search
         url = `/api/metadata?title=${encodeURIComponent(hasTitle!)}&source=${source}`
       }
-      
+
       if (formData.medium) {
         // Pass medium parameter for books (Google Books API)
         if (formData.medium === "Book") {
@@ -443,13 +444,13 @@ function AddPageContent() {
         // If ISBN is detected but medium not set, auto-set to Book
         url += `&medium=Book`
       }
-      
+
       if (formData.season) {
         url += `&season=${encodeURIComponent(formData.season)}`
       }
 
       const response = await fetch(url)
-      
+
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || "Failed to fetch metadata")
@@ -458,7 +459,7 @@ function AddPageContent() {
       const metadata = await response.json()
 
       // Check if there's existing data that would be overwritten
-      const hasExistingData = 
+      const hasExistingData =
         formData.title ||
         formData.poster_url ||
         formData.genre ||
@@ -505,17 +506,17 @@ function AddPageContent() {
 
   const applyMetadata = (metadata: any, fieldsToOverride?: Record<string, boolean>) => {
     // Handle genre as array or string (for backward compatibility)
-    const fetchedGenres = metadata.genre 
-      ? (Array.isArray(metadata.genre) 
-          ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
-          : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
+    const fetchedGenres = metadata.genre
+      ? (Array.isArray(metadata.genre)
+        ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
+        : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
       : []
-    const fetchedLanguages = metadata.language 
+    const fetchedLanguages = metadata.language
       ? (Array.isArray(metadata.language)
-          ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
-          : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
+        ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
+        : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
       : []
-    
+
     setFormData((prev) => {
       // Handle genres - merge if not overriding, replace if overriding
       let finalGenres: string[] = []
@@ -537,7 +538,7 @@ function AddPageContent() {
         })
         finalGenres = mergedGenres
       }
-      
+
       // Handle languages - merge if not overriding, replace if overriding
       let finalLanguages: string[] = []
       if (fieldsToOverride?.language && fetchedLanguages.length > 0) {
@@ -558,13 +559,13 @@ function AddPageContent() {
         })
         finalLanguages = mergedLanguages
       }
-      
+
       // Update input fields to reflect merged values
       const genreText = finalGenres.length > 0 ? finalGenres.join(", ") : ""
       const languageText = finalLanguages.length > 0 ? finalLanguages.join(", ") : ""
       setGenreInput(genreText)
       setLanguageInput(languageText)
-      
+
       return {
         ...prev,
         title: (fieldsToOverride?.title && metadata.title) ? metadata.title : prev.title,
@@ -606,20 +607,7 @@ function AddPageContent() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="border-b">
-        <div className="flex items-center justify-between px-4 py-3">
-          <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => router.push("/analytics")}>
-              <ArrowLeft className="h-4 w-4" />
-            </Button>
-            <h1 className="text-sm font-mono uppercase tracking-wider">
-              {entryId ? "Edit Entry" : "Add Entry"}
-            </h1>
-          </div>
-          <ThemeToggle />
-        </div>
-      </header>
+      <PageHeader title={entryId ? "Edit Entry" : "Add Entry"} />
 
       {/* Form */}
       <main className="max-w-4xl mx-auto p-6">
@@ -1114,7 +1102,7 @@ function AddPageContent() {
                 onChange={(e) => {
                   const value = e.target.value
                   const isbn = detectISBN(value)
-                  
+
                   // Auto-set medium to "Book" if ISBN is detected
                   if (isbn) {
                     setFormData({ ...formData, imdb_id: value, medium: "Book" })
@@ -1132,67 +1120,67 @@ function AddPageContent() {
             <Label htmlFor="poster_url" className="text-sm font-mono">
               Poster URL
             </Label>
-              <div className="flex gap-2">
-                <Input
-                  id="poster_url"
-                  type="url"
-                  value={formData.poster_url || ""}
-                  onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
-                  placeholder="https://..."
-                  className="flex-1"
-                />
-                <input
-                  type="file"
-                  id="image-upload"
-                  accept="image/*"
-                  className="hidden"
-                  onChange={handleImageUpload}
-                  disabled={uploadingImage}
+            <div className="flex gap-2">
+              <Input
+                id="poster_url"
+                type="url"
+                value={formData.poster_url || ""}
+                onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
+                placeholder="https://..."
+                className="flex-1"
+              />
+              <input
+                type="file"
+                id="image-upload"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageUpload}
+                disabled={uploadingImage}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => document.getElementById('image-upload')?.click()}
+                disabled={uploadingImage}
+                className="gap-2"
+              >
+                {uploadingImage ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Uploading...
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-4 w-4" />
+                    Upload
+                  </>
+                )}
+              </Button>
+            </div>
+            {formData.poster_url && (
+              <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
+                <SafeImage
+                  src={formData.poster_url}
+                  alt="Poster preview"
+                  fill
+                  className="object-contain"
+                  fallbackElement={
+                    <div className="flex items-center justify-center h-full text-muted-foreground">
+                      Invalid image URL
+                    </div>
+                  }
                 />
                 <Button
                   type="button"
-                  variant="outline"
-                  onClick={() => document.getElementById('image-upload')?.click()}
-                  disabled={uploadingImage}
-                  className="gap-2"
+                  variant="destructive"
+                  size="icon"
+                  className="absolute top-2 right-2 h-8 w-8"
+                  onClick={() => setFormData({ ...formData, poster_url: null })}
                 >
-                  {uploadingImage ? (
-                    <>
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      <Upload className="h-4 w-4" />
-                      Upload
-                    </>
-                  )}
+                  <X className="h-4 w-4" />
                 </Button>
               </div>
-              {formData.poster_url && (
-                <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
-                  <SafeImage
-                    src={formData.poster_url}
-                    alt="Poster preview"
-                    fill
-                    className="object-contain"
-                    fallbackElement={
-                      <div className="flex items-center justify-center h-full text-muted-foreground">
-                        Invalid image URL
-                      </div>
-                    }
-                  />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2 h-8 w-8"
-                    onClick={() => setFormData({ ...formData, poster_url: null })}
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
+            )}
           </div>
 
           {/* Submit Buttons */}
@@ -1210,9 +1198,20 @@ function AddPageContent() {
                 </>
               )}
             </Button>
+            {!entryId && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => router.push("/import")}
+                disabled={loading}
+              >
+                <Upload className="mr-2 h-4 w-4" />
+                Import CSV
+              </Button>
+            )}
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               onClick={() => router.push("/analytics")}
               disabled={loading}
             >
@@ -1286,7 +1285,7 @@ function AddPageContent() {
                         Genre
                       </label>
                       <div className="text-xs text-muted-foreground break-words">
-                        {Array.isArray(pendingMetadata.genre) 
+                        {Array.isArray(pendingMetadata.genre)
                           ? pendingMetadata.genre.join(", ")
                           : pendingMetadata.genre}
                       </div>
@@ -1395,9 +1394,9 @@ function AddPageContent() {
           </div>
           <DialogFooter className="flex-col sm:flex-row gap-2 flex-shrink-0 border-t pt-4 mt-4">
             <div className="flex gap-2 w-full sm:w-auto">
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   // Select all
@@ -1416,9 +1415,9 @@ function AddPageContent() {
               >
                 Select All
               </Button>
-              <Button 
-                type="button" 
-                variant="outline" 
+              <Button
+                type="button"
+                variant="outline"
                 size="sm"
                 onClick={() => {
                   // Deselect all
@@ -1442,8 +1441,8 @@ function AddPageContent() {
               <Button type="button" variant="outline" onClick={handleCancelOverride} className="flex-1 sm:flex-initial">
                 Cancel
               </Button>
-              <Button 
-                type="button" 
+              <Button
+                type="button"
                 onClick={handleConfirmOverride}
                 disabled={!Object.values(overrideFields).some(v => v)}
                 className="flex-1 sm:flex-initial"

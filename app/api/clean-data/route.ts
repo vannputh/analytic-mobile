@@ -9,7 +9,7 @@ RULES:
 3. Strip all currency symbols from prices, output as plain numbers
 4. Parse durations into standardized format: "X min" or "Xh Ym" (e.g., "2h" becomes "120 min", "1:30" becomes "90 min")
 5. Normalize medium values to one of: Movie, TV Show, Book, Game, Podcast
-6. Normalize status values to one of: Finished, In Progress, On Hold, Dropped, Plan to Watch
+6. Normalize status values to one of: Finished, Watching, On Hold, Dropped, Plan to Watch
 7. Genre should be an array of strings. Split comma-separated genres and trim whitespace
 8. If a field is empty or "N/A" or "-", set it to null
 9. Trim all string values
@@ -87,7 +87,7 @@ export async function POST(request: NextRequest) {
 
     // Extract JSON from response (handle potential markdown wrapping)
     let jsonString = text.trim()
-    
+
     // Try to extract JSON from code blocks
     const jsonMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/)
     if (jsonMatch) {
@@ -124,7 +124,7 @@ export async function POST(request: NextRequest) {
         console.error("Failed to parse JSON. Response length:", jsonString.length)
         console.error("First 500 chars:", jsonString.substring(0, 500))
         console.error("Last 500 chars:", jsonString.substring(Math.max(0, jsonString.length - 500)))
-        
+
         // Try to extract just the entries array as a last resort
         const entriesMatch = jsonString.match(/"entries"\s*:\s*\[([\s\S]*?)\](?:\s*[,}])/)
         if (entriesMatch) {
@@ -157,7 +157,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     console.error("Clean data error:", error)
-    
+
     if (error instanceof SyntaxError) {
       return NextResponse.json(
         { error: "Failed to parse AI response as JSON" },

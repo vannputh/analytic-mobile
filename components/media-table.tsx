@@ -3,8 +3,9 @@
 import { useState, useMemo, useEffect } from "react";
 import { SafeImage } from "@/components/ui/safe-image";
 import { MediaEntry } from "@/lib/database.types";
-import { getPlaceholderPoster, formatDate } from "@/lib/types";
+import { getPlaceholderPoster, formatDate, getTimeTaken } from "@/lib/types";
 import { formatLength } from "@/lib/parsing-utils";
+import { formatLanguageForDisplay, normalizeLanguage } from "@/lib/language-utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,12 +46,28 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TYPE_OPTIONS, STATUS_OPTIONS, MEDIUM_OPTIONS } from "@/lib/types";
-import { StatusHistoryDialog } from "@/components/status-history-dialog";
-import { EditEntryDialog } from "@/components/edit-entry-dialog";
+
+import { MediaDetailsDialog } from "@/components/media-details-dialog";
 import { restartEntry } from "@/lib/actions";
 import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
+import { EpisodeWatchRecord } from "@/lib/database.types";
+
+// Parse episode history from JSON
+function parseEpisodeHistory(data: unknown): EpisodeWatchRecord[] {
+  if (!data) return [];
+  if (Array.isArray(data)) {
+    return data.filter(
+      (item): item is EpisodeWatchRecord =>
+        typeof item === "object" &&
+        item !== null &&
+        typeof item.episode === "number" &&
+        typeof item.watched_at === "string"
+    );
+  }
+  return [];
+}
 
 interface MediaTableProps {
   entries: MediaEntry[];
@@ -155,10 +172,9 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
     genre: "",
   });
   const [isBatchEditing, setIsBatchEditing] = useState(false);
-  const [historyDialogOpen, setHistoryDialogOpen] = useState(false);
-  const [selectedEntryForHistory, setSelectedEntryForHistory] = useState<MediaEntry | null>(null);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedEntryForEdit, setSelectedEntryForEdit] = useState<MediaEntry | null>(null);
+
+  const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
+  const [selectedEntryForDetails, setSelectedEntryForDetails] = useState<MediaEntry | null>(null);
 
   // Load column visibility from Supabase
   useEffect(() => {
@@ -166,7 +182,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
       const saved = await getUserPreference<string[]>("media-table-visible-columns");
       if (saved && Array.isArray(saved)) {
         // Filter to only include valid ColumnKey values
-        const validColumns = saved.filter((key): key is ColumnKey => 
+        const validColumns = saved.filter((key): key is ColumnKey =>
           key in COLUMN_DEFINITIONS
         );
         setVisibleColumns(new Set(validColumns));
@@ -179,7 +195,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
   // Save column visibility to Supabase
   useEffect(() => {
     if (!columnsLoaded) return; // Don't save until we've loaded initial state
-    
+
     async function saveColumns() {
       await setUserPreference("media-table-visible-columns", Array.from(visibleColumns));
     }
@@ -211,7 +227,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
     switch (status) {
       case "Finished":
         return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "In Progress":
+      case "Watching":
         return "bg-blue-500/10 text-blue-500 border-blue-500/20";
       case "On Hold":
         return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
@@ -293,8 +309,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
           bValue = b.length?.toLowerCase() || "";
           break;
         case "language":
-          aValue = Array.isArray(a.language) ? a.language.join(", ").toLowerCase() : "";
-          bValue = Array.isArray(b.language) ? b.language.join(", ").toLowerCase() : "";
+          aValue = formatLanguageForDisplay(a.language).toLowerCase();
+          bValue = formatLanguageForDisplay(b.language).toLowerCase();
           break;
         case "price":
           aValue = a.price ?? 0;
@@ -369,7 +385,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
 
         try {
           let url = `/api/metadata?title=${encodeURIComponent(entry.title.trim())}`;
-          
+
           // Pass medium parameter for books (Google Books API)
           if (entry.medium === "Book") {
             url += `&medium=${encodeURIComponent(entry.medium)}`;
@@ -384,7 +400,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
               url += `&type=${omdbType}`;
             }
           }
-          
+
           if (entry.season) {
             url += `&season=${encodeURIComponent(entry.season)}`;
           }
@@ -463,7 +479,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
   };
 
   const visibleColumnCount = visibleColumns.size;
-  const totalColumnCount = Object.keys(COLUMN_DEFINITIONS).length + 1; // +1 for Actions
+  const totalColumnCount = Object.keys(COLUMN_DEFINITIONS).length;
 
   const allSelected = sortedEntries.length > 0 && selectedEntries.size === sortedEntries.length;
   const someSelected = selectedEntries.size > 0 && selectedEntries.size < sortedEntries.length;
@@ -479,7 +495,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
     if (batchEditData.type && batchEditData.type !== "no-change") updateData.type = batchEditData.type;
     if (batchEditData.status && batchEditData.status !== "no-change") updateData.status = batchEditData.status;
     if (batchEditData.medium && batchEditData.medium !== "no-change") updateData.medium = batchEditData.medium;
-    
+
     // Handle price: empty string means keep current, any value means update
     if (batchEditData.price !== "" && batchEditData.price !== "no-change") {
       const priceValue = parseFloat(batchEditData.price);
@@ -487,16 +503,14 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
         updateData.price = priceValue;
       }
     }
-    
-    // Handle language: parse comma-separated languages (like genre)
+
+    // Handle language: parse comma-separated languages and normalize
     if (batchEditData.language !== "" && batchEditData.language !== "no-change") {
-      const languages = batchEditData.language
-        .split(",")
-        .map((l) => l.trim())
-        .filter((l) => l.length > 0);
+      // Normalize will handle string splitting and cleaning
+      const languages = normalizeLanguage(batchEditData.language);
       updateData.language = languages.length > 0 ? languages : null;
     }
-    
+
     // Handle episodes: empty string means keep current, any value means update
     if (batchEditData.episodes !== "" && batchEditData.episodes !== "no-change") {
       const episodesValue = parseInt(batchEditData.episodes);
@@ -533,7 +547,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
         for (const entry of entriesToEdit) {
           try {
             // Preserve original case of existing genres
-            const currentGenres = Array.isArray(entry.genre) 
+            const currentGenres = Array.isArray(entry.genre)
               ? entry.genre.map((g) => g.trim()).filter((g) => g.length > 0)
               : [];
 
@@ -590,7 +604,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
       setBatchEditData({ type: "", status: "", medium: "", price: "", language: "", episodes: "", genre: "" });
       setSelectedEntries(new Set());
       onRefresh?.();
-      
+
       // Close dialog after a brief delay to ensure state updates
       setTimeout(() => {
         setBatchEditOpen(false);
@@ -897,7 +911,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                   </button>
                 </TableHead>
               )}
-              <TableHead className="w-[80px]">Actions</TableHead>
+
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -911,7 +925,11 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
               sortedEntries.map((entry) => (
                 <TableRow
                   key={entry.id}
-                  className={showSelectMode && selectedEntries.has(entry.id) ? "bg-muted/50" : ""}
+                  className={`cursor-pointer hover:bg-muted/50 ${showSelectMode && selectedEntries.has(entry.id) ? "bg-muted/50" : ""}`}
+                  onClick={() => {
+                    setSelectedEntryForDetails(entry);
+                    setDetailsDialogOpen(true);
+                  }}
                 >
                   {showSelectMode && (
                     <TableCell onClick={(e) => e.stopPropagation()}>
@@ -929,7 +947,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     </TableCell>
                   )}
                   {visibleColumns.has("poster") && (
-                    <TableCell>
+                    <TableCell className="py-3">
                       <div className="w-12 h-16 relative bg-muted rounded flex items-center justify-center overflow-hidden">
                         <SafeImage
                           src={entry.poster_url || ""}
@@ -946,19 +964,19 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     </TableCell>
                   )}
                   {visibleColumns.has("title") && (
-                    <TableCell className="font-medium">
+                    <TableCell className="font-medium py-3">
                       {entry.title}
                     </TableCell>
                   )}
                   {visibleColumns.has("type") && (
-                    <TableCell>
+                    <TableCell className="py-3">
                       <Badge variant="outline">{entry.type || "N/A"}</Badge>
                     </TableCell>
                   )}
                   {visibleColumns.has("status") && (
-                    <TableCell>
+                    <TableCell className="py-3">
                       <div className="flex items-center gap-2">
-                        <Badge className={getStatusColor(entry.status)}>
+                        <Badge className={`${getStatusColor(entry.status)} whitespace-nowrap`}>
                           {entry.status || "N/A"}
                         </Badge>
                         {(entry.status === "Dropped" || entry.status === "On Hold") && (
@@ -985,7 +1003,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     </TableCell>
                   )}
                   {visibleColumns.has("my_rating") && (
-                    <TableCell>
+                    <TableCell className="py-3">
                       {entry.my_rating ? (
                         <div className="flex items-center gap-1">
                           <span className="font-semibold">{entry.my_rating}</span>
@@ -997,7 +1015,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     </TableCell>
                   )}
                   {visibleColumns.has("average_rating") && (
-                    <TableCell>
+                    <TableCell className="py-3">
                       {entry.average_rating ? (
                         <div className="flex items-center gap-1">
                           <span className="font-semibold">{entry.average_rating}</span>
@@ -1009,127 +1027,68 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     </TableCell>
                   )}
                   {visibleColumns.has("genre") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {entry.genre && Array.isArray(entry.genre)
                         ? entry.genre.join(", ")
                         : entry.genre || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("platform") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {entry.platform || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("medium") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {entry.medium || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("season") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {entry.season || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("episodes") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {entry.episodes || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("length") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {formatLength(entry.length) || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("language") && (
-                    <TableCell className="text-sm">
-                      {entry.language && Array.isArray(entry.language)
-                        ? entry.language.join(", ")
-                        : (typeof entry.language === 'string' && entry.language) ? entry.language : <span className="text-muted-foreground">N/A</span>}
+                    <TableCell className="text-sm py-3">
+                      {formatLanguageForDisplay(entry.language)}
                     </TableCell>
                   )}
                   {visibleColumns.has("price") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {entry.price ? `$${entry.price.toFixed(2)}` : <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("time_taken") && (
-                    <TableCell className="text-sm">
-                      {entry.time_taken || <span className="text-muted-foreground">N/A</span>}
+                    <TableCell className="text-sm py-3">
+                      {getTimeTaken(entry.time_taken, entry.start_date, entry.finish_date) || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("imdb_id") && (
-                    <TableCell className="text-sm font-mono">
+                    <TableCell className="text-sm font-mono py-3">
                       {entry.imdb_id || <span className="text-muted-foreground">N/A</span>}
                     </TableCell>
                   )}
                   {visibleColumns.has("start_date") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {formatDate(entry.start_date)}
                     </TableCell>
                   )}
                   {visibleColumns.has("finish_date") && (
-                    <TableCell className="text-sm">
+                    <TableCell className="text-sm py-3">
                       {formatDate(entry.finish_date)}
                     </TableCell>
                   )}
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            // Enable select mode and select the entry immediately
-                            if (onSelectModeChange) {
-                              onSelectModeChange(true);
-                            }
-                            setSelectedEntries(prev => {
-                              const next = new Set(prev);
-                              next.add(entry.id);
-                              return next;
-                            });
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <CheckSquare className="h-4 w-4 mr-2" />
-                          Select
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedEntryForEdit(entry);
-                            setEditDialogOpen(true);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <Pencil className="h-4 w-4 mr-2" />
-                          Edit
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedEntryForHistory(entry);
-                            setHistoryDialogOpen(true);
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <History className="h-4 w-4 mr-2" />
-                          View History
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => onDelete?.(entry.id)}
-                          className="cursor-pointer text-destructive"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+
                 </TableRow>
               ))
             )}
@@ -1146,7 +1105,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
               Update the selected fields for all selected entries. Leave fields empty or select "Keep current" to preserve existing values.
             </DialogDescription>
           </DialogHeader>
-          
+
           <div className="flex-1 overflow-y-auto px-6 min-h-0">
             <div className="space-y-6 py-4">
               {/* Basic Information Section */}
@@ -1156,8 +1115,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
                       <Label htmlFor="batch-type">Type</Label>
-                      <Select 
-                        value={batchEditData.type} 
+                      <Select
+                        value={batchEditData.type}
                         onValueChange={(value) => setBatchEditData(prev => ({ ...prev, type: value }))}
                         disabled={isBatchEditing}
                       >
@@ -1176,8 +1135,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="batch-status">Status</Label>
-                      <Select 
-                        value={batchEditData.status} 
+                      <Select
+                        value={batchEditData.status}
                         onValueChange={(value) => setBatchEditData(prev => ({ ...prev, status: value }))}
                         disabled={isBatchEditing}
                       >
@@ -1196,8 +1155,8 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="batch-medium">Medium</Label>
-                      <Select 
-                        value={batchEditData.medium} 
+                      <Select
+                        value={batchEditData.medium}
                         onValueChange={(value) => setBatchEditData(prev => ({ ...prev, medium: value }))}
                         disabled={isBatchEditing}
                       >
@@ -1285,14 +1244,14 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
           </div>
 
           <DialogFooter className="flex-shrink-0 px-6 pb-6 pt-4 border-t">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => handleBatchEditDialogChange(false)}
               disabled={isBatchEditing}
             >
               Cancel
             </Button>
-            <Button 
+            <Button
               onClick={batchEdit}
               disabled={isBatchEditing}
             >
@@ -1309,33 +1268,18 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
         </DialogContent>
       </Dialog>
 
-      {selectedEntryForHistory && (
-        <StatusHistoryDialog
-          open={historyDialogOpen}
-          onOpenChange={setHistoryDialogOpen}
-          mediaEntryId={selectedEntryForHistory.id}
-          mediaTitle={selectedEntryForHistory.title}
-          currentStatus={selectedEntryForHistory.status}
-          onRestart={() => {
-            onRefresh?.();
-            setHistoryDialogOpen(false);
-          }}
-        />
-      )}
 
-      <EditEntryDialog
-        entry={selectedEntryForEdit}
-        open={editDialogOpen}
-        onOpenChange={(open) => {
-          setEditDialogOpen(open);
-          if (!open) {
-            setSelectedEntryForEdit(null);
-          }
+
+      {/* Media Details Dialog */}
+      <MediaDetailsDialog
+        entry={selectedEntryForDetails}
+        open={detailsDialogOpen}
+        onOpenChange={setDetailsDialogOpen}
+        onSuccess={(updated) => {
+          onEntryUpdate?.(updated);
+          // If we need to refresh the list locally instead of full parent refresh, we rely on onEntryUpdate
         }}
-        onSuccess={(updatedEntry) => {
-          // Update the entry in place without full refresh
-          onEntryUpdate?.(updatedEntry);
-        }}
+        onDelete={onDelete}
       />
     </div>
   );

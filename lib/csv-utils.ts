@@ -43,7 +43,7 @@ export function parseCSVText(text: string): ParseResult {
   const headers = result.meta.fields || []
   headers.forEach((header) => {
     const normalizedHeader = header.toLowerCase().replace(/\s+/g, '_')
-    
+
     for (const [dbColumn, variations] of Object.entries(COLUMN_MAPPINGS)) {
       if (variations.some(v => normalizedHeader.includes(v) || v.includes(normalizedHeader))) {
         headerMappings[header] = dbColumn
@@ -82,11 +82,11 @@ export function sanitizeEntry(
     }
     // Try direct key
     if (raw[key] !== undefined) return raw[key]
-    
+
     // Try mapped key
     const dbKey = Object.entries(mappings || {}).find(([_, v]) => v === key)?.[0]
     if (dbKey && raw[dbKey] !== undefined) return raw[dbKey]
-    
+
     return undefined
   }
 
@@ -223,37 +223,37 @@ export function sanitizeEntry(
 
 function sanitizeMedium(value: string): string {
   const normalized = value.toLowerCase().trim()
-  
+
   if (normalized.includes('movie') || normalized.includes('film')) return 'Movie'
   if (normalized.includes('tv') || normalized.includes('show') || normalized.includes('series')) return 'TV Show'
   if (normalized.includes('book')) return 'Book'
   if (normalized.includes('live theatre') || normalized.includes('live theater') || normalized.includes('live play')) return 'Live Theatre'
   if (normalized.includes('theatre') || normalized.includes('theater') || normalized.includes('play')) return 'Theatre'
   if (normalized.includes('podcast') || normalized.includes('audio')) return 'Podcast'
-  
+
   return value.trim()
 }
 
 function sanitizeStatus(value: string): string {
   const normalized = value.toLowerCase().trim()
-  
-  if (normalized.includes('progress') || normalized === 'watching' || normalized === 'reading') return 'In Progress'
+
+  if (normalized.includes('progress') || normalized === 'watching' || normalized === 'reading') return 'Watching'
   if (normalized.includes('finish') || normalized === 'complete' || normalized === 'done') return 'Finished'
   if (normalized.includes('hold') || normalized === 'paused') return 'On Hold'
   if (normalized.includes('drop') || normalized === 'abandoned') return 'Dropped'
   if (normalized.includes('plan') || normalized.includes('watch') && normalized.includes('plan')) return 'Plan to Watch'
-  
+
   return value.trim()
 }
 
 function sanitizeLength(value: string): string {
   const trimmed = value.trim()
-  
+
   // If it already has units, return as is
   if (/\d+\s*(min|mins|minutes|hrs?|hours|pages?|pp?)\b/i.test(trimmed)) {
     return trimmed
   }
-  
+
   // Try to add appropriate units
   const num = parseInt(trimmed.replace(/\D/g, ''))
   if (!isNaN(num)) {
@@ -262,17 +262,17 @@ function sanitizeLength(value: string): string {
     // Otherwise likely minutes
     return `${num} min`
   }
-  
+
   return trimmed
 }
 
 function sanitizeDate(value: string): string | null {
   if (!value || value.trim() === '') return null
-  
+
   try {
     // Try to parse various date formats
     let date: Date | null = null
-    
+
     // ISO format: YYYY-MM-DD
     if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       date = new Date(value)
@@ -291,40 +291,40 @@ function sanitizeDate(value: string): string | null {
     else {
       date = new Date(value)
     }
-    
+
     if (date && !isNaN(date.getTime())) {
       return date.toISOString().split('T')[0]
     }
   } catch (error) {
     console.error('Date parsing error:', error)
   }
-  
+
   return null
 }
 
 export function validateEntry(entry: Partial<CreateEntryInput>): string[] {
   const errors: string[] = []
-  
+
   if (!entry.title || entry.title.trim() === '') {
     errors.push('Title is required')
   }
-  
+
   if (entry.my_rating && (entry.my_rating < 0 || entry.my_rating > 10)) {
     errors.push('My rating must be between 0 and 10')
   }
-  
+
   if (entry.average_rating && (entry.average_rating < 0 || entry.average_rating > 10)) {
     errors.push('Average rating must be between 0 and 10')
   }
-  
+
   if (entry.episodes && entry.episodes < 0) {
     errors.push('Episodes cannot be negative')
   }
-  
+
   if (entry.price && entry.price < 0) {
     errors.push('Price cannot be negative')
   }
-  
+
   return errors
 }
 

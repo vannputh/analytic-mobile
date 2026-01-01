@@ -400,7 +400,7 @@ export async function GET(request: NextRequest) {
       let posterUrl = null;
       if (volumeInfo.imageLinks) {
         // Prefer larger images, fall back to smaller ones
-        let imageUrl = volumeInfo.imageLinks.large || 
+        const imageUrl = volumeInfo.imageLinks.large || 
                       volumeInfo.imageLinks.medium || 
                       volumeInfo.imageLinks.thumbnail || 
                       volumeInfo.imageLinks.smallThumbnail || 
@@ -535,7 +535,7 @@ export async function GET(request: NextRequest) {
     // Step 3: Fetch from OMDB (if using OMDB)
     if (useOMDB && omdbApiKey) {
       try {
-        let params = new URLSearchParams({
+        const params = new URLSearchParams({
           apikey: omdbApiKey,
           plot: "short",
         });
@@ -565,8 +565,8 @@ export async function GET(request: NextRequest) {
         }
 
         if (params.has("i") || params.has("t")) {
-          let omdbUrl = `https://www.omdbapi.com/?${params.toString()}`;
-          let response = await fetch(omdbUrl);
+          const omdbUrl = `https://www.omdbapi.com/?${params.toString()}`;
+          const response = await fetch(omdbUrl);
           omdbData = await response.json();
         }
       } catch (error) {
@@ -766,7 +766,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Merge data from OMDB and TMDB, preferring more accurate sources
-    let metadata: {
+    const metadata: {
       title: string | null;
       poster_url: string | null;
       genre: string | string[] | null;

@@ -110,7 +110,7 @@ export function DataTable({ data }: DataTableProps) {
         const status = row.getValue('status') as string
         const variants = {
           'Finished': 'default',
-          'In Progress': 'secondary',
+          'Watching': 'secondary',
           'On Hold': 'outline',
           'Dropped': 'destructive',
         } as const
@@ -228,7 +228,7 @@ export function DataTable({ data }: DataTableProps) {
   // Save column visibility to Supabase
   useEffect(() => {
     if (!columnsLoaded) return // Don't save until we've loaded initial state
-    
+
     async function saveColumns() {
       await setUserPreference("data-table-visible-columns", columnVisibility)
     }

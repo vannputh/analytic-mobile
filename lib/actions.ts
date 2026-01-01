@@ -4,12 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 import { MediaEntry, MediaStatusHistory } from '@/lib/database.types'
 import { revalidatePath } from 'next/cache'
 
-export type CreateEntryInput = Omit<MediaEntry, 'id' | 'created_at' | 'updated_at'>
+export type CreateEntryInput = Partial<Omit<MediaEntry, 'id' | 'created_at' | 'updated_at'>> & { title: string }
 
 export async function createEntry(data: CreateEntryInput) {
   try {
     const supabase = await createClient()
-    
+
     const { data: newEntry, error } = await supabase
       .from('media_entries')
       .insert(data)
@@ -26,13 +26,13 @@ export async function createEntry(data: CreateEntryInput) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
-    
+
     return { success: true, data: newEntry }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -40,7 +40,7 @@ export async function createEntry(data: CreateEntryInput) {
 export async function updateEntry(id: string, data: Partial<CreateEntryInput>) {
   try {
     const supabase = await createClient()
-    
+
     const { data: updatedEntry, error } = await supabase
       .from('media_entries')
       .update(data)
@@ -58,13 +58,13 @@ export async function updateEntry(id: string, data: Partial<CreateEntryInput>) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
-    
+
     return { success: true, data: updatedEntry }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -72,7 +72,7 @@ export async function updateEntry(id: string, data: Partial<CreateEntryInput>) {
 export async function getEntry(id: string) {
   try {
     const supabase = await createClient()
-    
+
     const { data, error } = await supabase
       .from('media_entries')
       .select('*')
@@ -87,9 +87,9 @@ export async function getEntry(id: string) {
     return { success: true, data }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -97,7 +97,7 @@ export async function getEntry(id: string) {
 export async function deleteEntry(id: string) {
   try {
     const supabase = await createClient()
-    
+
     const { error } = await supabase
       .from('media_entries')
       .delete()
@@ -113,13 +113,13 @@ export async function deleteEntry(id: string) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
-    
+
     return { success: true }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -127,14 +127,14 @@ export async function deleteEntry(id: string) {
 export async function batchUploadEntries(entries: CreateEntryInput[]) {
   try {
     const supabase = await createClient()
-    
+
     // Insert entries in batches of 100 to avoid timeout
     const batchSize = 100
     const results = []
-    
+
     for (let i = 0; i < entries.length; i += batchSize) {
       const batch = entries.slice(i, i + batchSize)
-      
+
       const { data, error } = await supabase
         .from('media_entries')
         .insert(batch)
@@ -142,10 +142,10 @@ export async function batchUploadEntries(entries: CreateEntryInput[]) {
 
       if (error) {
         console.error('Error in batch upload:', error)
-        return { 
-          success: false, 
+        return {
+          success: false,
           error: error.message,
-          processedCount: i 
+          processedCount: i
         }
       }
 
@@ -157,17 +157,17 @@ export async function batchUploadEntries(entries: CreateEntryInput[]) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
-    
-    return { 
-      success: true, 
+
+    return {
+      success: true,
       data: results,
-      count: results.length 
+      count: results.length
     }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -182,7 +182,7 @@ export async function getEntries(filters?: {
 }) {
   try {
     const supabase = await createClient()
-    
+
     let query = supabase
       .from('media_entries')
       .select('*')
@@ -206,7 +206,7 @@ export async function getEntries(filters?: {
       const countQuery = supabase
         .from('media_entries')
         .select('*', { count: 'exact', head: true })
-      
+
       if (filters?.status) {
         countQuery.eq('status', filters.status)
       }
@@ -238,16 +238,16 @@ export async function getEntries(filters?: {
       return { success: false, error: error.message }
     }
 
-    return { 
-      success: true, 
+    return {
+      success: true,
       data: data || [],
       count: totalCount
     }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -258,14 +258,14 @@ export async function getStats() {
     const currentYear = new Date().getFullYear()
     const yearStart = `${currentYear}-01-01`
     const yearEnd = `${currentYear}-12-31`
-    
+
     // Run all queries in parallel for better performance
     const [totalCountResult, finishedCountResult, priceMediumResult] = await Promise.all([
       // Get total entries count
       supabase
         .from('media_entries')
         .select('*', { count: 'exact', head: true }),
-      
+
       // Get finished this year count (using database filter)
       supabase
         .from('media_entries')
@@ -273,7 +273,7 @@ export async function getStats() {
         .eq('status', 'Finished')
         .gte('finish_date', yearStart)
         .lte('finish_date', yearEnd),
-      
+
       // Get only price and medium columns (much smaller than select *)
       supabase
         .from('media_entries')
@@ -306,7 +306,7 @@ export async function getStats() {
     for (const entry of entries) {
       // Sum prices
       totalSpent += entry.price || 0
-      
+
       // Count mediums
       const medium = entry.medium || 'Unknown'
       mediumCounts[medium] = (mediumCounts[medium] || 0) + 1
@@ -326,9 +326,9 @@ export async function getStats() {
     }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -336,7 +336,7 @@ export async function getStats() {
 export async function getStatusHistory(mediaEntryId: string) {
   try {
     const supabase = await createClient()
-    
+
     // Limit to most recent 100 entries for performance
     const { data, error } = await supabase
       .from('media_status_history')
@@ -353,9 +353,9 @@ export async function getStatusHistory(mediaEntryId: string) {
     return { success: true, data: data || [] }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -363,7 +363,7 @@ export async function getStatusHistory(mediaEntryId: string) {
 export async function restartEntry(id: string) {
   try {
     const supabase = await createClient()
-    
+
     // Get current entry
     const { data: entry, error: fetchError } = await supabase
       .from('media_entries')
@@ -377,9 +377,9 @@ export async function restartEntry(id: string) {
 
     // Only restart if currently Dropped or On Hold
     if (entry.status !== 'Dropped' && entry.status !== 'On Hold') {
-      return { 
-        success: false, 
-        error: 'Can only restart items that are Dropped or On Hold' 
+      return {
+        success: false,
+        error: 'Can only restart items that are Dropped or On Hold'
       }
     }
 
@@ -387,7 +387,7 @@ export async function restartEntry(id: string) {
     const { data: updatedEntry, error: updateError } = await supabase
       .from('media_entries')
       .update({
-        status: 'In Progress',
+        status: 'Watching',
         finish_date: null,
         start_date: entry.start_date || new Date().toISOString().split('T')[0],
       })
@@ -405,13 +405,13 @@ export async function restartEntry(id: string) {
     revalidatePath('/entries')
     revalidatePath('/analytics')
     revalidatePath('/library')
-    
+
     return { success: true, data: updatedEntry }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
@@ -419,11 +419,11 @@ export async function restartEntry(id: string) {
 export async function getUniqueFieldValues() {
   try {
     const supabase = await createClient()
-    
+
     // Get all entries to extract unique values
     const { data, error } = await supabase
       .from('media_entries')
-      .select('type, status, medium, platform')
+      .select('type, status, medium, platform, language')
 
     if (error) {
       console.error('Error fetching unique values:', error)
@@ -434,12 +434,40 @@ export async function getUniqueFieldValues() {
     const statuses = new Set<string>()
     const mediums = new Set<string>()
     const platforms = new Set<string>()
+    const languages = new Set<string>()
 
     for (const entry of data || []) {
       if (entry.type) types.add(entry.type)
       if (entry.status) statuses.add(entry.status)
       if (entry.medium) mediums.add(entry.medium)
       if (entry.platform) platforms.add(entry.platform)
+
+      // Handle language which may be string[], JSON string, or plain string
+      if (entry.language) {
+        let langs: string[] = [];
+        const val = entry.language as unknown; // runtime type might differ from TS type
+
+        if (Array.isArray(val)) {
+          langs = val;
+        } else if (typeof val === 'string') {
+          if (val.trim().startsWith('[')) {
+            try {
+              const parsed = JSON.parse(val);
+              if (Array.isArray(parsed)) langs = parsed;
+            } catch (e) {
+              // failed to parse, reuse val as string
+              langs = [val];
+            }
+          } else {
+            // Comma separated or single string
+            langs = val.split(',').map(s => s.trim());
+          }
+        }
+
+        langs.forEach(l => {
+          if (l) languages.add(l.replace(/['"]+/g, '')); // Remove extra quotes if any crept in
+        });
+      }
     }
 
     return {
@@ -449,13 +477,14 @@ export async function getUniqueFieldValues() {
         statuses: Array.from(statuses).sort(),
         mediums: Array.from(mediums).sort(),
         platforms: Array.from(platforms).sort(),
+        languages: Array.from(languages).sort(),
       }
     }
   } catch (error) {
     console.error('Unexpected error:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Unknown error' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error'
     }
   }
 }
