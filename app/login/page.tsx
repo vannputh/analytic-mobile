@@ -8,12 +8,14 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
-import { Mail, Loader2 } from "lucide-react"
+import { Mail, Loader2, KeyRound, ArrowLeft, RefreshCw } from "lucide-react"
 
 function LoginPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const [email, setEmail] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [emailSent, setEmailSent] = useState(false)
   const [loading, setLoading] = useState(false)
   const supabase = createClient()
 
@@ -28,7 +30,7 @@ function LoginPageContent() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (!email) {
       toast.error("Please enter your email address")
       return
@@ -107,7 +109,8 @@ function LoginPageContent() {
 
       if (error) throw error
 
-      toast.success("Check your email for the magic link!")
+      setEmailSent(true)
+      toast.success("Check your email! You can click the magic link or enter the code below.")
     } catch (error) {
       console.error("Login error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to send magic link")
@@ -116,43 +119,165 @@ function LoginPageContent() {
     }
   }
 
+  const handleVerifyOtp = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    if (!otpCode || otpCode.length !== 6) {
+      toast.error("Please enter the 6-digit code")
+      return
+    }
+
+    setLoading(true)
+
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        email,
+        token: otpCode,
+        type: "email",
+      })
+
+      if (error) throw error
+
+      toast.success("Login successful!")
+      const redirectTo = searchParams.get("redirect") || "/"
+      router.push(redirectTo)
+    } catch (error) {
+      console.error("OTP verification error:", error)
+      toast.error(error instanceof Error ? error.message : "Invalid code. Please try again.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleResend = async () => {
+    setLoading(true)
+    setOtpCode("")
+
+    try {
+      const redirectTo = searchParams.get("redirect") || "/"
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
+        },
+      })
+
+      if (error) throw error
+
+      toast.success("New code sent! Check your email.")
+    } catch (error) {
+      console.error("Resend error:", error)
+      toast.error(error instanceof Error ? error.message : "Failed to resend code")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const handleBackToEmail = () => {
+    setEmailSent(false)
+    setOtpCode("")
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle className="text-2xl">Login</CardTitle>
           <CardDescription>
-            Enter your email to receive a magic link
+            {emailSent
+              ? `We sent a code to ${email}`
+              : "Enter your email to receive a magic link and code"}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
-                required
-              />
+          {!emailSent ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email">Email</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  disabled={loading}
+                  required
+                />
+              </div>
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Send Magic Link
+                  </>
+                )}
+              </Button>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <form onSubmit={handleVerifyOtp} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="otp">Verification Code</Label>
+                  <Input
+                    id="otp"
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    maxLength={6}
+                    placeholder="123456"
+                    value={otpCode}
+                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
+                    disabled={loading}
+                    className="text-center text-2xl tracking-widest font-mono"
+                    autoComplete="one-time-code"
+                  />
+                  <p className="text-xs text-muted-foreground text-center">
+                    Enter the 6-digit code from your email, or click the magic link
+                  </p>
+                </div>
+                <Button type="submit" className="w-full" disabled={loading || otpCode.length !== 6}>
+                  {loading ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <KeyRound className="mr-2 h-4 w-4" />
+                      Verify Code
+                    </>
+                  )}
+                </Button>
+              </form>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleBackToEmail}
+                  disabled={loading}
+                >
+                  <ArrowLeft className="mr-2 h-4 w-4" />
+                  Different Email
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleResend}
+                  disabled={loading}
+                >
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Resend Code
+                </Button>
+              </div>
             </div>
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Sending...
-                </>
-              ) : (
-                <>
-                  <Mail className="mr-2 h-4 w-4" />
-                  Send Magic Link
-                </>
-              )}
-            </Button>
-          </form>
+          )}
         </CardContent>
       </Card>
     </div>
