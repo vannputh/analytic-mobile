@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import dynamic from "next/dynamic";
 import { MediaEntry, EpisodeWatchRecord, MediaStatusHistory } from "@/lib/database.types";
 import { SafeImage } from "@/components/ui/safe-image";
 import { Badge } from "@/components/ui/badge";
@@ -42,7 +43,10 @@ import {
     Upload,
     X,
 } from "lucide-react";
-import { format, parseISO, isValid, differenceInDays } from "date-fns";
+import { format } from "date-fns/format"
+import { parseISO } from "date-fns/parseISO"
+import { isValid } from "date-fns/isValid"
+import { differenceInDays } from "date-fns/differenceInDays"
 import { getPlaceholderPoster, formatDate } from "@/lib/types";
 import { formatLanguageForDisplay } from "@/lib/language-utils";
 import { Button } from "@/components/ui/button";
@@ -61,6 +65,15 @@ import { cn } from "@/lib/utils";
 import { updateEntry, createEntry, getStatusHistory, CreateEntryInput, getUniqueFieldValues } from "@/lib/actions";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { EpisodeTracker } from "@/components/shared/EpisodeTracker";
+import { StatusHistoryTimeline } from "@/components/shared/StatusHistoryTimeline";
+import { StarRatingInput } from "@/components/form-inputs/StarRatingInput";
+
+// Dynamic import for AdvancedTabContent - only load when advanced tab is opened
+const AdvancedTabContent = dynamic(
+    () => import("@/components/media/AdvancedTabContent").then(m => m.AdvancedTabContent),
+    { ssr: false }
+);
 
 interface MediaDetailsDialogProps {
     entry: MediaEntry | null;
@@ -795,42 +808,10 @@ export function MediaDetailsDialog({
                                         {/* Rating */}
                                         <div className="col-span-full space-y-2">
                                             <Label>My Rating</Label>
-                                            <div className="flex items-center gap-3">
-                                                <div className="flex items-center border rounded-md h-10 pl-3 pr-1 min-w-[5rem] justify-between bg-background">
-                                                    <span className="font-medium">{formData.my_rating || "--"}</span>
-                                                    <div className="flex flex-col border-l ml-2">
-                                                        <button
-                                                            type="button"
-                                                            className="h-5 w-6 flex items-center justify-center hover:bg-muted rounded-tr-sm transition-colors"
-                                                            onClick={() => setFormData(p => ({ ...p, my_rating: Math.min(10, (p.my_rating || 0) + 1) }))}
-                                                        >
-                                                            <ChevronUp className="h-3 w-3" />
-                                                        </button>
-                                                        <button
-                                                            type="button"
-                                                            className="h-5 w-6 flex items-center justify-center hover:bg-muted rounded-br-sm transition-colors"
-                                                            onClick={() => setFormData(p => ({ ...p, my_rating: Math.max(0, (p.my_rating || 0) - 1) }))}
-                                                        >
-                                                            <ChevronDown className="h-3 w-3" />
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div className="flex text-yellow-500 gap-0.5">
-                                                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(star => (
-                                                        <Star
-                                                            key={star}
-                                                            className={cn(
-                                                                "h-5 w-5 cursor-pointer hover:scale-110 transition-transform",
-                                                                (formData.my_rating || 0) >= star ? "fill-current" : "text-muted-foreground/30"
-                                                            )}
-                                                            onClick={() => setFormData(p => ({ ...p, my_rating: star }))}
-                                                        />
-                                                    ))}
-                                                </div>
-                                                <span className="text-base font-medium">
-                                                    {formData.my_rating ? formData.my_rating + ".0" : "0.0"}/10
-                                                </span>
-                                            </div>
+                                            <StarRatingInput
+                                                value={formData.my_rating}
+                                                onChange={(val) => setFormData(p => ({ ...p, my_rating: val }))}
+                                            />
                                         </div>
 
                                         {/* Poster URL */}
@@ -875,235 +856,53 @@ export function MediaDetailsDialog({
 
                                 {/* EPISODES TAB */}
                                 {activeTab === "episodes" && (
-                                    <div className="space-y-6 max-w-2xl">
-                                        <div className="flex items-center justify-between">
-                                            <h3 className="font-semibold text-lg">Episode Watch History</h3>
-                                            <div className="flex items-center gap-2">
-                                                <Input
-                                                    type="number"
-                                                    className="w-20 text-center"
-                                                    value={newEpisodeNumber}
-                                                    onChange={(e) => setNewEpisodeNumber(Math.max(1, parseInt(e.target.value) || 1))}
-                                                />
-                                                <Button onClick={handleAddEpisode} size="sm">
-                                                    <PlayCircle className="mr-2 h-4 w-4" />
-                                                    Add Episode
-                                                </Button>
-                                            </div>
-                                        </div>
-
-                                        {episodeHistory.length === 0 ? (
-                                            <div className="text-center py-12 text-muted-foreground">
-                                                <PlayCircle className="h-12 w-12 mx-auto mb-3 opacity-20" />
-                                                <p>No episodes recorded yet</p>
-                                                <p className="text-sm">Click "Add Episode" to start tracking</p>
-                                            </div>
-                                        ) : (
-                                            <div className="space-y-3">
-                                                {episodeHistory.map((record, idx) => (
-                                                    <div
-                                                        key={`${record.episode}-${record.watched_at}`}
-                                                        className="flex items-center justify-between p-4 rounded-lg border bg-card hover:bg-accent/50 transition-colors"
-                                                    >
-                                                        <div className="flex items-center gap-4">
-                                                            <div className="flex items-center justify-center w-12 h-12 rounded-full bg-primary/10 text-primary font-semibold">
-                                                                {record.episode}
-                                                            </div>
-                                                            <div>
-                                                                <div className="font-medium">Episode {record.episode}</div>
-                                                                {editingEpisodeIdx === idx ? (
-                                                                    <div className="flex items-center gap-2 mt-1">
-                                                                        <Input
-                                                                            type="datetime-local"
-                                                                            className="h-8 text-sm w-auto"
-                                                                            value={editingEpisodeDate}
-                                                                            onChange={(e) => setEditingEpisodeDate(e.target.value)}
-                                                                        />
-                                                                        <Button size="sm" variant="ghost" className="h-8 px-2" onClick={handleSaveEditEpisode}>
-                                                                            <Check className="h-4 w-4" />
-                                                                        </Button>
-                                                                        <Button size="sm" variant="ghost" className="h-8 px-2" onClick={() => setEditingEpisodeIdx(null)}>
-                                                                            <X className="h-4 w-4" />
-                                                                        </Button>
-                                                                    </div>
-                                                                ) : (
-                                                                    <div className="text-sm text-muted-foreground">
-                                                                        {format(parseISO(record.watched_at), "PPP 'at' p")}
-                                                                    </div>
-                                                                )}
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex items-center gap-2">
-                                                            <Badge variant="outline" className="text-xs">
-                                                                {differenceInDays(new Date(), parseISO(record.watched_at))} days ago
-                                                            </Badge>
-                                                            {editingEpisodeIdx !== idx && (
-                                                                <>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-8 w-8"
-                                                                        onClick={() => handleStartEditEpisode(idx)}
-                                                                        title="Edit date"
-                                                                    >
-                                                                        <Pencil className="h-4 w-4" />
-                                                                    </Button>
-                                                                    <Button
-                                                                        variant="ghost"
-                                                                        size="icon"
-                                                                        className="h-8 w-8 text-destructive hover:text-destructive"
-                                                                        onClick={() => handleDeleteEpisode(idx)}
-                                                                        title="Delete episode"
-                                                                    >
-                                                                        <Trash2 className="h-4 w-4" />
-                                                                    </Button>
-                                                                </>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
+                                    <EpisodeTracker
+                                        episodeHistory={episodeHistory}
+                                        newEpisodeNumber={newEpisodeNumber}
+                                        onNewEpisodeNumberChange={setNewEpisodeNumber}
+                                        onAddEpisode={handleAddEpisode}
+                                        onDeleteEpisode={handleDeleteEpisode}
+                                        onEditEpisode={async (idx, newDate) => {
+                                            if (!entry) return;
+                                            const updatedHistory = episodeHistory.map((record, i) =>
+                                                i === idx ? { ...record, watched_at: newDate } : record
+                                            ).sort((a, b) => b.episode - a.episode);
+                                            setEpisodeHistory(updatedHistory);
+                                            try {
+                                                const result = await updateEntry(entry.id, {
+                                                    episode_history: updatedHistory as any,
+                                                });
+                                                if (result.success) {
+                                                    toast.success("Episode date updated");
+                                                    onSuccess?.(result.data);
+                                                } else {
+                                                    toast.error(result.error);
+                                                }
+                                            } catch (error) {
+                                                console.error(error);
+                                                toast.error("An error occurred");
+                                            }
+                                        }}
+                                    />
                                 )}
 
                                 {/* ADVANCED TAB */}
                                 {activeTab === "advanced" && (
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                        {/* Type */}
-                                        <div className="space-y-2">
-                                            <Label>Type</Label>
-                                            <Select
-                                                value={formData.type || undefined}
-                                                onValueChange={(val) => setFormData(p => ({ ...p, type: val }))}
-                                            >
-                                                <SelectTrigger><SelectValue placeholder="Select..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {dropdownOptions.types.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        {/* Season */}
-                                        <div className="space-y-2">
-                                            <Label>Season</Label>
-                                            <Input
-                                                value={formData.season || ""}
-                                                onChange={(e) => setFormData(p => ({ ...p, season: e.target.value }))}
-                                                placeholder="e.g. Season 1, 2024"
-                                            />
-                                        </div>
-
-                                        {/* Length/Duration */}
-                                        <div className="space-y-2">
-                                            <Label>Length / Duration</Label>
-                                            <Input
-                                                value={formData.length || ""}
-                                                onChange={(e) => setFormData(p => ({ ...p, length: e.target.value }))}
-                                                placeholder="e.g. 2h 30m, 320 pages"
-                                            />
-                                        </div>
-
-                                        {/* Time Taken - Auto-calculated */}
-                                        <div className="space-y-2">
-                                            <Label>Time Taken</Label>
-                                            <Input
-                                                value={formData.time_taken || ""}
-                                                readOnly
-                                                disabled
-                                                className="bg-muted text-muted-foreground"
-                                                placeholder="Auto-calculated from dates"
-                                            />
-                                        </div>
-
-                                        {/* Price */}
-                                        <div className="space-y-2">
-                                            <Label>Price</Label>
-                                            <Input
-                                                type="number"
-                                                step="0.01"
-                                                value={formData.price ?? ""}
-                                                onChange={(e) => setFormData(p => ({ ...p, price: e.target.value ? parseFloat(e.target.value) : null }))}
-                                                placeholder="0.00"
-                                            />
-                                        </div>
-
-                                        {/* Average Rating (from external source) */}
-                                        <div className="space-y-2">
-                                            <Label>Average Rating (IMDb/External)</Label>
-                                            <Input
-                                                type="number"
-                                                step="0.1"
-                                                min="0"
-                                                max="10"
-                                                value={formData.average_rating ?? ""}
-                                                onChange={(e) => setFormData(p => ({ ...p, average_rating: e.target.value ? parseFloat(e.target.value) : null }))}
-                                                placeholder="e.g. 8.5"
-                                            />
-                                        </div>
-
-                                        {/* Language - Dropdown */}
-                                        <div className="col-span-full space-y-2">
-                                            <Label>Language</Label>
-                                            <Select
-                                                value={formData.language?.[0] || undefined}
-                                                onValueChange={(val) => setFormData(p => ({ ...p, language: [val] }))}
-                                            >
-                                                <SelectTrigger><SelectValue placeholder="Select Language..." /></SelectTrigger>
-                                                <SelectContent>
-                                                    {dropdownOptions.languages.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-
-                                        {/* Genre */}
-                                        <div className="col-span-full space-y-2">
-                                            <Label>Genre(s)</Label>
-                                            <Input
-                                                value={Array.isArray(formData.genre) ? formData.genre.join(", ") : (formData.genre || "")}
-                                                onChange={(e) => setFormData(p => ({
-                                                    ...p,
-                                                    genre: e.target.value.split(",").map(g => g.trim()).filter(Boolean)
-                                                }))}
-                                                placeholder="Action, Drama, Comedy"
-                                            />
-                                            <p className="text-xs text-muted-foreground">Separate multiple genres with commas</p>
-                                        </div>
-                                    </div>
+                                    <AdvancedTabContent
+                                        formData={formData}
+                                        onFormChange={setFormData}
+                                        dropdownOptions={{
+                                            types: dropdownOptions.types,
+                                            languages: dropdownOptions.languages,
+                                        }}
+                                    />
                                 )}
 
                                 {/* HISTORY TAB */}
                                 {activeTab === "history" && (
                                     <div className="space-y-4">
                                         <h3 className="font-medium">Status History</h3>
-                                        {historyLoading ? (
-                                            <div className="flex justify-center py-8"><Loader2 className="animate-spin h-6 w-6" /></div>
-                                        ) : statusHistory.length === 0 ? (
-                                            <p className="text-muted-foreground text-sm">No history found.</p>
-                                        ) : (
-                                            <div className="space-y-3 relative before:absolute before:inset-0 before:ml-5 before:-translate-x-px md:before:mx-auto md:before:translate-x-0 before:h-full before:w-0.5 before:bg-gradient-to-b before:from-transparent before:via-slate-300 before:to-transparent">
-                                                {statusHistory.map((item, idx) => (
-                                                    <div key={item.id} className="relative flex items-center justify-between md:justify-normal md:odd:flex-row-reverse group is-active">
-                                                        {/* Icon */}
-                                                        <div className="flex items-center justify-center w-10 h-10 rounded-full border border-white bg-slate-300 group-[.is-active]:bg-emerald-500 text-slate-500 group-[.is-active]:text-emerald-50 shadow shrink-0 md:order-1 md:group-odd:-translate-x-1/2 md:group-even:translate-x-1/2">
-                                                            <History className="w-4 h-4" />
-                                                        </div>
-
-                                                        {/* Card */}
-                                                        <div className="w-[calc(100%-4rem)] md:w-[calc(50%-2.5rem)] bg-card p-4 rounded border shadow-sm">
-                                                            <div className="flex flex-col gap-1">
-                                                                <div className="flex items-center gap-2 text-sm">
-                                                                    <Badge variant="outline">{item.old_status || "None"}</Badge>
-                                                                    <span>→</span>
-                                                                    <Badge variant="default">{item.new_status}</Badge>
-                                                                </div>
-                                                                <time className="text-xs text-muted-foreground">{formatDate(item.changed_at)}</time>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                        )}
+                                        <StatusHistoryTimeline history={statusHistory} loading={historyLoading} />
                                     </div>
                                 )}
                             </div>

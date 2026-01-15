@@ -2,65 +2,35 @@
 
 import { useMemo } from "react"
 import {
-    AreaChart,
-    Area,
     BarChart,
     Bar,
-    PieChart,
-    Pie,
-    Cell,
     XAxis,
     YAxis,
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    Legend,
     Treemap,
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { FoodMetrics } from "@/hooks/useFoodMetrics"
+import {
+    CHART_COLORS,
+    TREEMAP_COLORS,
+    ACCENT_COLOR,
+    tooltipStyle,
+    gridStyle,
+    tickStyle,
+    axisStyle,
+    formatMonthLabel,
+    formatCurrency,
+    formatNumber,
+    emptyStateClass,
+} from "@/components/charts"
+import { SimplePieChart } from "@/components/charts/SimplePieChart"
+import { AreaChartBase } from "@/components/charts/AreaChartBase"
 
 interface FoodAnalyticsChartsProps {
     metrics: FoodMetrics
-}
-
-// Monochrome palette with better spread for readability
-const CHART_COLORS = [
-    "hsl(0, 0%, 15%)", // Very dark
-    "hsl(0, 0%, 30%)",
-    "hsl(0, 0%, 45%)",
-    "hsl(0, 0%, 60%)",
-    "hsl(0, 0%, 75%)",
-    "hsl(0, 0%, 85%)", // Very light
-    "hsl(0, 0%, 40%)",
-    "hsl(0, 0%, 55%)",
-]
-
-const ACCENT_COLOR = "hsl(0, 0%, 10%)"
-
-// Custom tooltip style
-const tooltipStyle = {
-    backgroundColor: "hsl(0, 0%, 98%)",
-    border: "1px solid hsl(0, 0%, 90%)",
-    borderRadius: "4px",
-    padding: "8px 12px",
-    fontSize: "11px",
-    fontFamily: "monospace",
-    boxShadow: "0 2px 4px rgba(0,0,0,0.05)",
-}
-
-function formatMonthLabel(month: string): string {
-    const [year, m] = month.split("-")
-    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-    return `${monthNames[parseInt(m, 10) - 1]} ${year.slice(2)}`
-}
-
-function formatCurrency(amount: number): string {
-    return `$${amount.toLocaleString()}`
-}
-
-function formatNumber(num: number): string {
-    return num.toLocaleString()
 }
 
 // Visits by Month Chart
@@ -73,31 +43,27 @@ function VisitsByMonthChart({ data }: { data: { month: string; count: number }[]
     }, [data])
 
     if (chartData.length === 0) {
-        return (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-                No visit data available
-            </div>
-        )
+        return <div className={emptyStateClass}>No visit data available</div>
     }
 
     return (
         <ResponsiveContainer width="100%" height={280}>
             <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" vertical={false} />
+                <CartesianGrid strokeDasharray={gridStyle.strokeDasharray} stroke={gridStyle.stroke} vertical={false} />
                 <XAxis
                     dataKey="month"
-                    tick={{ fontSize: 9, fontFamily: "monospace" }}
+                    tick={{ ...tickStyle }}
                     tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
+                    axisLine={{ stroke: axisStyle.stroke }}
                     interval={0}
                     angle={-45}
                     textAnchor="end"
                     height={50}
                 />
                 <YAxis
-                    tick={{ fontSize: 9, fontFamily: "monospace" }}
+                    tick={{ ...tickStyle }}
                     tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
+                    axisLine={{ stroke: axisStyle.stroke }}
                 />
                 <Tooltip
                     contentStyle={tooltipStyle}
@@ -110,74 +76,28 @@ function VisitsByMonthChart({ data }: { data: { month: string; count: number }[]
     )
 }
 
-// Spending by Month Chart
+// Spending by Month Chart - using AreaChartBase
 function SpendingByMonthChart({ data }: { data: { month: string; amount: number }[] }) {
     const chartData = useMemo(() => {
         return data.map((d) => ({
-            month: formatMonthLabel(d.month),
+            month: d.month,
             amount: Math.round(d.amount),
         }))
     }, [data])
 
-    if (chartData.length === 0) {
-        return (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-                No spending data available
-            </div>
-        )
-    }
-
     return (
-        <ResponsiveContainer width="100%" height={280}>
-            <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
-                <defs>
-                    <linearGradient id="spendingGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor={ACCENT_COLOR} stopOpacity={0.3} />
-                        <stop offset="95%" stopColor={ACCENT_COLOR} stopOpacity={0} />
-                    </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" vertical={false} />
-                <XAxis
-                    dataKey="month"
-                    tick={{ fontSize: 9, fontFamily: "monospace" }}
-                    tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-                    interval={0}
-                    angle={-45}
-                    textAnchor="end"
-                    height={50}
-                />
-                <YAxis
-                    tick={{ fontSize: 9, fontFamily: "monospace" }}
-                    tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-                    tickFormatter={(v) => `$${v >= 1000 ? `${v / 1000}k` : v}`}
-                />
-                <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value: number | undefined) => [formatCurrency(value ?? 0), "Spent"]}
-                />
-                <Area
-                    type="monotone"
-                    dataKey="amount"
-                    stroke={ACCENT_COLOR}
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#spendingGradient)"
-                />
-            </AreaChart>
-        </ResponsiveContainer>
+        <AreaChartBase
+            data={chartData}
+            dataKey="amount"
+            xAxisKey="month"
+            valueFormatter={formatCurrency}
+            valueLabel="Spent"
+            formatYLabel={(v) => `$${v >= 1000 ? `${v / 1000}k` : v}`}
+            gradientId="spendingGradient"
+            emptyMessage="No spending data available"
+        />
     )
 }
-
-// Palette for Treemap (darker for white text visibility)
-const TREEMAP_COLORS = [
-    "hsl(0, 0%, 15%)",
-    "hsl(0, 0%, 25%)",
-    "hsl(0, 0%, 35%)",
-    "hsl(0, 0%, 45%)",
-    "hsl(0, 0%, 55%)",
-]
 
 // Cuisine Types Treemap
 function CuisineTreemap({ data }: { data: Record<string, number> }) {
@@ -189,11 +109,7 @@ function CuisineTreemap({ data }: { data: Record<string, number> }) {
     }, [data])
 
     if (chartData.length === 0) {
-        return (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-                No cuisine data
-            </div>
-        )
+        return <div className={emptyStateClass}>No cuisine data</div>
     }
 
     return (
@@ -255,75 +171,10 @@ function CuisineTreemap({ data }: { data: Record<string, number> }) {
     )
 }
 
-// Pie Chart for city/neighborhood/price level
-function DistributionPieChart({ data, title }: { data: Record<string, number>; title: string }) {
-    const chartData = useMemo(() => {
-        return Object.entries(data)
-            .filter(([name]) => name && name !== "null" && name !== "undefined")
-            .sort((a, b) => b[1] - a[1])
-            .slice(0, 8)
-            .map(([name, value]) => ({ name, value }))
-    }, [data])
-
-    if (chartData.length === 0) {
-        return (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-                No {title.toLowerCase()} data
-            </div>
-        )
-    }
-
-    return (
-        <ResponsiveContainer width="100%" height={320}>
-            <PieChart margin={{ top: 20, right: 20, bottom: 40, left: 20 }}>
-                <Pie
-                    data={chartData}
-                    cx="50%"
-                    cy="45%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={3}
-                    dataKey="value"
-                    label={({ percent }) => {
-                        const p = percent ?? 0
-                        if (p < 0.05) return ""
-                        return `${(p * 100).toFixed(0)}%`
-                    }}
-                    labelLine={{ stroke: "hsl(0, 0%, 60%)", strokeWidth: 1 }}
-                >
-                    {chartData.map((_, index) => (
-                        <Cell
-                            key={`cell-${index}`}
-                            fill={CHART_COLORS[index % CHART_COLORS.length]}
-                            stroke="hsl(0, 0%, 100%)"
-                            strokeWidth={1}
-                        />
-                    ))}
-                </Pie>
-                <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Visits"]}
-                />
-                <Legend
-                    verticalAlign="bottom"
-                    align="center"
-                    iconType="circle"
-                    iconSize={8}
-                    wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', paddingTop: '10px' }}
-                />
-            </PieChart>
-        </ResponsiveContainer>
-    )
-}
-
 // Most Visited Places Chart
 function MostVisitedChart({ data }: { data: { name: string; count: number; avgRating: number }[] }) {
     if (data.length === 0) {
-        return (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-                No visit data
-            </div>
-        )
+        return <div className={emptyStateClass}>No visit data</div>
     }
 
     return (
@@ -333,19 +184,19 @@ function MostVisitedChart({ data }: { data: { name: string; count: number; avgRa
                 layout="vertical"
                 margin={{ top: 10, right: 30, left: 0, bottom: 10 }}
             >
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" horizontal={false} />
+                <CartesianGrid strokeDasharray={gridStyle.strokeDasharray} stroke={gridStyle.stroke} horizontal={false} />
                 <XAxis
                     type="number"
-                    tick={{ fontSize: 9, fontFamily: "monospace" }}
+                    tick={{ ...tickStyle }}
                     tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
+                    axisLine={{ stroke: axisStyle.stroke }}
                 />
                 <YAxis
                     type="category"
                     dataKey="name"
-                    tick={{ fontSize: 9, fontFamily: "monospace" }}
+                    tick={{ ...tickStyle }}
                     tickLine={false}
-                    axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
+                    axisLine={{ stroke: axisStyle.stroke }}
                     width={100}
                 />
                 <Tooltip
@@ -367,11 +218,7 @@ function MostVisitedChart({ data }: { data: { name: string; count: number; avgRa
 // Rating Distribution Chart
 function RatingDistributionChart({ data }: { data: { rating: number; count: number }[] }) {
     if (data.length === 0) {
-        return (
-            <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-                No rating data
-            </div>
-        )
+        return <div className={emptyStateClass}>No rating data</div>
     }
 
     // Ensure we have all ratings 1-5 represented
@@ -384,7 +231,7 @@ function RatingDistributionChart({ data }: { data: { rating: number; count: numb
     return (
         <ResponsiveContainer width="100%" height={280}>
             <BarChart data={fullData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" />
+                <CartesianGrid strokeDasharray={gridStyle.strokeDasharray} stroke={gridStyle.stroke} />
                 <XAxis
                     dataKey="rating"
                     tick={{ fontSize: 10, fontFamily: "monospace" }}
@@ -466,7 +313,7 @@ export function FoodAnalyticsCharts({ metrics }: FoodAnalyticsChartsProps) {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
-                        <DistributionPieChart data={metrics.countByItemCategory} title="Food Type" />
+                        <SimplePieChart data={metrics.countByItemCategory} title="Food Type" valueLabel="Visits" />
                     </CardContent>
                 </Card>
 
@@ -477,7 +324,7 @@ export function FoodAnalyticsCharts({ metrics }: FoodAnalyticsChartsProps) {
                         </CardTitle>
                     </CardHeader>
                     <CardContent className="pt-0">
-                        <DistributionPieChart data={metrics.countByCategory} title="Category" />
+                        <SimplePieChart data={metrics.countByCategory} title="Category" valueLabel="Visits" />
                     </CardContent>
                 </Card>
 

@@ -3,12 +3,10 @@
 import { useState, useEffect, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { toast } from "sonner"
-import { Mail, Loader2, KeyRound, ArrowLeft, RefreshCw } from "lucide-react"
+import { Loader2 } from "lucide-react"
+import { LoginForm, OtpForm } from "@/components/auth"
 
 function LoginPageContent() {
   const router = useRouter()
@@ -191,92 +189,21 @@ function LoginPageContent() {
         </CardHeader>
         <CardContent>
           {!emailSent ? (
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={loading}
-                  required
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending...
-                  </>
-                ) : (
-                  <>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Send Magic Link
-                  </>
-                )}
-              </Button>
-            </form>
+            <LoginForm
+              email={email}
+              onEmailChange={setEmail}
+              onSubmit={handleLogin}
+              loading={loading}
+            />
           ) : (
-            <div className="space-y-4">
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="otp">Verification Code</Label>
-                  <Input
-                    id="otp"
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    maxLength={6}
-                    placeholder="123456"
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ""))}
-                    disabled={loading}
-                    className="text-center text-2xl tracking-widest font-mono"
-                    autoComplete="one-time-code"
-                  />
-                  <p className="text-xs text-muted-foreground text-center">
-                    Enter the 6-digit code from your email, or click the magic link
-                  </p>
-                </div>
-                <Button type="submit" className="w-full" disabled={loading || otpCode.length !== 6}>
-                  {loading ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Verifying...
-                    </>
-                  ) : (
-                    <>
-                      <KeyRound className="mr-2 h-4 w-4" />
-                      Verify Code
-                    </>
-                  )}
-                </Button>
-              </form>
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleBackToEmail}
-                  disabled={loading}
-                >
-                  <ArrowLeft className="mr-2 h-4 w-4" />
-                  Different Email
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleResend}
-                  disabled={loading}
-                >
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Resend Code
-                </Button>
-              </div>
-            </div>
+            <OtpForm
+              otpCode={otpCode}
+              onOtpChange={setOtpCode}
+              onSubmit={handleVerifyOtp}
+              loading={loading}
+              onResend={handleResend}
+              onBack={handleBackToEmail}
+            />
           )}
         </CardContent>
       </Card>

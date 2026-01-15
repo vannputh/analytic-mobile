@@ -2,43 +2,20 @@
 
 import { useState, useRef, useEffect } from "react"
 import { useRouter } from "next/navigation"
-import Papa from "papaparse"
 import { supabase } from "@/lib/supabase"
 import { MediaEntryInsert } from "@/lib/database.types"
+import { ArrowLeft } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import { CheckCircle2, AlertCircle, Loader2, Upload, ArrowLeft, FileText, Sparkles } from "lucide-react"
 import { toast } from "sonner"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
-import { differenceInDays, parseISO, isValid } from "date-fns"
+import { ParsedRow, transformCleanedData } from "@/lib/csv-parser"
 
-interface ParsedRow {
-  title?: string
-  type?: string
-  season?: string
-  language?: string
-  status?: string
-  rating?: string | number
-  start_date?: string
-  finish_date?: string
-  time_taken?: string
-  platform?: string
-  medium?: string
-  episodes?: string | number
-  length?: string
-  genre?: string
-  price?: string | number
-  poster_url?: string
-  [key: string]: unknown
-}
+// Import modular components
+import { ImportFileUpload } from "@/components/import/ImportFileUpload"
+import { ImportPasteArea } from "@/components/import/ImportPasteArea"
+import { ImportActions } from "@/components/import/ImportActions"
+import { ImportPreviewTable } from "@/components/import/ImportPreviewTable"
+import { ImportFormatGuide } from "@/components/import/ImportFormatGuide"
 
 export default function ImportPage() {
   const router = useRouter()
@@ -110,6 +87,9 @@ export default function ImportPage() {
     setPreviewData([])
 
     try {
+      // Lazy load PapaParse only when needed
+      const Papa = (await import('papaparse')).default
+
       // First parse the CSV to get raw data
       const parseResult = await new Promise<ParsedRow[]>((resolve, reject) => {
         Papa.parse(data, {
@@ -150,72 +130,7 @@ export default function ImportPage() {
       }
 
       // Convert cleaned data to MediaEntryInsert format
-      const cleaned: MediaEntryInsert[] = result.data
-        .filter((row: any) => row.title)
-        .map((row: any) => {
-          // Handle my_rating - check multiple possible field names
-          const myRating = row.my_rating ?? row["my rating"] ?? row["My Rating"] ?? row["MY_RATING"] ?? null
-          // Parse rating if it's a string
-          const parsedMyRating = myRating !== null && myRating !== undefined
-            ? (typeof myRating === "string" ? parseFloat(myRating) : myRating)
-            : null
-
-          // Format season - normalize to "Season X" format if it's a number
-          let formattedSeason = row.season || null
-          if (formattedSeason) {
-            const seasonStr = String(formattedSeason).trim()
-            // If it's just a number, format as "Season X"
-            const seasonNum = parseInt(seasonStr)
-            if (!isNaN(seasonNum) && seasonStr === String(seasonNum)) {
-              formattedSeason = `Season ${seasonNum}`
-            } else if (seasonStr.toLowerCase() === "n/a" || seasonStr === "-" || seasonStr === "") {
-              formattedSeason = null
-            }
-          }
-
-          // Auto-calculate time_taken if both dates are present
-          let calculatedTimeTaken = row.time_taken || null
-          if ((!calculatedTimeTaken || calculatedTimeTaken.trim() === "") && row.start_date && row.finish_date) {
-            try {
-              const start = parseISO(row.start_date)
-              const finish = parseISO(row.finish_date)
-              if (isValid(start) && isValid(finish)) {
-                const days = differenceInDays(finish, start)
-                if (days >= 0) {
-                  // Add 1 to make it inclusive (same day = 1 day)
-                  const totalDays = days + 1
-                  calculatedTimeTaken = totalDays === 1 ? "1 day" : `${totalDays} days`
-                }
-              }
-            } catch (error) {
-              // Invalid date format, keep original time_taken
-            }
-          }
-
-          return {
-            title: row.title || "",
-            type: row.type || null,
-            season: formattedSeason,
-            language: row.language && Array.isArray(row.language) ? row.language :
-              row.language ? row.language.split(",").map((l: string) => l.trim()).filter(Boolean) : null,
-            status: row.status || null,
-            my_rating: parsedMyRating,
-            rating: row.rating ?? null,
-            average_rating: row.average_rating ?? null,
-            start_date: row.start_date || null,
-            finish_date: row.finish_date || null,
-            time_taken: calculatedTimeTaken,
-            platform: row.platform || null,
-            medium: row.medium || null,
-            episodes: row.episodes ? parseInt(row.episodes.toString()) : null,
-            length: row.length || null,
-            genre: row.genre && Array.isArray(row.genre) ? row.genre :
-              row.genre ? row.genre.split(",").map((g: string) => g.trim()).filter(Boolean) : null,
-            price: row.price ? parseFloat(row.price.toString()) : null,
-            poster_url: row.poster_url || null,
-            imdb_id: row.imdb_id || null,
-          }
-        })
+      const cleaned = transformCleanedData(result.data)
 
       setCleanedData(cleaned)
       setTotalRows(cleaned.length)
@@ -460,159 +375,38 @@ export default function ImportPage() {
       </header>
 
       <div className="max-w-5xl mx-auto p-4 sm:p-6 space-y-4 sm:space-y-6">
-        {/* File Upload */}
-        <div className="flex flex-wrap gap-2 sm:gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".csv,.tsv,.txt"
-            onChange={handleFileUpload}
-            className="hidden"
-          />
-          <Button
-            variant="outline"
-            onClick={() => fileInputRef.current?.click()}
-            className="gap-2"
-          >
-            <Upload className="h-4 w-4" />
-            Upload CSV
-          </Button>
-          <span className="text-sm text-muted-foreground self-center">or paste below</span>
-        </div>
+        <ImportFileUpload
+          onFileUpload={handleFileUpload}
+          fileInputRef={fileInputRef}
+        />
 
-        {/* Paste Area */}
-        <div className="relative">
-          <Textarea
-            placeholder="Paste CSV/TSV data here (include headers)..."
-            value={pastedData}
-            onChange={(e) => setPastedData(e.target.value)}
-            className="min-h-[150px] font-mono text-xs"
-            disabled={cleaning}
-          />
-          {cleaning && (
-            <div className="absolute inset-0 flex items-center justify-center bg-background/80 backdrop-blur-sm rounded-md">
-              <div className="flex flex-col items-center gap-2">
-                <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
-                <p className="text-xs font-mono text-muted-foreground flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3" />
-                  AI cleaning data...
-                </p>
-                <p className="text-[10px] font-mono text-muted-foreground/70">
-                  {elapsedSeconds}s
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+        <ImportPasteArea
+          pastedData={pastedData}
+          setPastedData={setPastedData}
+          cleaning={cleaning}
+          elapsedSeconds={elapsedSeconds}
+        />
 
-        {/* Actions */}
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          <Button
-            onClick={importData}
-            disabled={cleaning || importing || fetching || cleanedData.length === 0}
-          >
-            {importing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Importing...
-              </>
-            ) : (
-              <>
-                <FileText className="mr-2 h-4 w-4" />
-                Import {totalRows > 0 && `(${totalRows})`}
-              </>
-            )}
-          </Button>
+        <ImportActions
+          onImport={importData}
+          onBatchFetch={batchFetchMetadata}
+          onClear={clearData}
+          cleaning={cleaning}
+          importing={importing}
+          fetching={fetching}
+          cleanedData={cleanedData}
+          pastedData={pastedData}
+          totalRows={totalRows}
+          fetchProgress={fetchProgress}
+          importResults={importResults}
+        />
 
-          <Button
-            variant="outline"
-            onClick={batchFetchMetadata}
-            disabled={cleaning || importing || fetching || cleanedData.length === 0}
-          >
-            {fetching ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Fetching {fetchProgress.current}/{fetchProgress.total}...
-              </>
-            ) : (
-              <>
-                <Sparkles className="mr-2 h-4 w-4" />
-                Batch Fetch Metadata
-              </>
-            )}
-          </Button>
+        <ImportPreviewTable
+          previewData={previewData}
+          totalRows={totalRows}
+        />
 
-          <Button variant="outline" onClick={clearData} disabled={!pastedData || fetching}>
-            Clear
-          </Button>
-
-          {importResults && (
-            <div className="flex items-center gap-4 text-sm font-mono">
-              {importResults.success > 0 && (
-                <span className="flex items-center gap-1.5 text-green-600">
-                  <CheckCircle2 className="h-4 w-4" />
-                  {importResults.success}
-                </span>
-              )}
-              {importResults.failed > 0 && (
-                <span className="flex items-center gap-1.5 text-destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  {importResults.failed}
-                </span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Preview */}
-        {previewData.length > 0 && (
-          <div className="rounded-md border overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="text-xs">Title</TableHead>
-                  <TableHead className="text-xs">Medium</TableHead>
-                  <TableHead className="text-xs">Status</TableHead>
-                  <TableHead className="text-xs">Rating</TableHead>
-                  <TableHead className="text-xs">Genre</TableHead>
-                  <TableHead className="text-xs">Platform</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {previewData.map((row, index) => (
-                  <TableRow key={index}>
-                    <TableCell className="font-medium text-xs">{row.title || "-"}</TableCell>
-                    <TableCell className="text-xs">{row.medium || row.type || "-"}</TableCell>
-                    <TableCell className="text-xs">{row.status || "-"}</TableCell>
-                    <TableCell className="text-xs">
-                      {row.my_rating ?? row.rating ?? "-"}
-                    </TableCell>
-                    <TableCell className="text-xs">
-                      {row.genre && Array.isArray(row.genre)
-                        ? row.genre.join(", ")
-                        : row.genre || "-"}
-                    </TableCell>
-                    <TableCell className="text-xs">{row.platform || "-"}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {totalRows > 10 && (
-              <div className="p-2 text-xs text-muted-foreground border-t font-mono">
-                Showing 10 of {totalRows} rows
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Format Guide */}
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer hover:text-foreground">Column format</summary>
-          <div className="mt-2 p-3 bg-muted rounded font-mono">
-            <p className="mb-1"><strong>Required:</strong> title</p>
-            <p><strong>Optional:</strong> medium, type, season, language, status, rating, start_date, finish_date, platform, episodes, length, genre, price, poster_url</p>
-          </div>
-        </details>
+        <ImportFormatGuide />
       </div>
     </main>
   )

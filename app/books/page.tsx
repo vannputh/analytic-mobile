@@ -3,7 +3,8 @@ import { BookTable } from "@/components/book-table"
 import { PageHeader } from "@/components/page-header"
 import { Metadata } from "next"
 
-export const dynamic = 'force-dynamic'
+// Revalidate every 60 seconds for fresh data while allowing caching
+export const revalidate = 60
 
 export const metadata: Metadata = {
     title: "Books - Media Review",

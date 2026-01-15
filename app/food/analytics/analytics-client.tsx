@@ -1,15 +1,37 @@
 "use client"
 
 import { useMemo, useState } from "react"
+import dynamic from "next/dynamic"
 import { FoodEntry } from "@/lib/database.types"
 import { useFoodMetrics } from "@/hooks/useFoodMetrics"
-import { FoodKPIGrid } from "@/components/analytics/FoodKPIGrid"
-import { FoodAnalyticsCharts } from "@/components/analytics/FoodAnalyticsCharts"
 import { FoodFilterBar } from "@/components/analytics/FoodFilterBar"
 import { FoodFilterState, defaultFoodFilterState, PRICE_LEVELS } from "@/lib/food-types"
 import { Utensils } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+
+// Dynamic imports for chart components - reduces initial bundle size
+const FoodKPIGrid = dynamic(
+    () => import("@/components/analytics/FoodKPIGrid").then(m => m.FoodKPIGrid),
+    {
+        loading: () => (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                {Array(4).fill(0).map((_, i) => (
+                    <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
+                ))}
+            </div>
+        ),
+        ssr: false
+    }
+)
+
+const FoodAnalyticsCharts = dynamic(
+    () => import("@/components/analytics/FoodAnalyticsCharts").then(m => m.FoodAnalyticsCharts),
+    {
+        loading: () => <div className="h-96 bg-muted animate-pulse rounded-lg" />,
+        ssr: false
+    }
+)
 
 interface AnalyticsClientProps {
     initialEntries: FoodEntry[]

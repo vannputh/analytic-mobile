@@ -1,6 +1,7 @@
-import Papa from 'papaparse'
 import { CreateEntryInput } from './actions'
-import { differenceInDays, parseISO, isValid } from 'date-fns'
+import { differenceInDays } from 'date-fns/differenceInDays'
+import { parseISO } from 'date-fns/parseISO'
+import { isValid } from 'date-fns/isValid'
 
 // Column mapping for common variations
 const COLUMN_MAPPINGS: Record<string, string[]> = {
@@ -29,7 +30,10 @@ export interface ParseResult {
   headerMappings: Record<string, string>
 }
 
-export function parseCSVText(text: string): ParseResult {
+export async function parseCSVText(text: string): Promise<ParseResult> {
+  // Lazy load PapaParse only when needed
+  const Papa = (await import('papaparse')).default
+  
   const result = Papa.parse(text, {
     header: true,
     skipEmptyLines: true,

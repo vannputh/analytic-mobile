@@ -1,6 +1,8 @@
 import { useMemo } from "react"
 import { MusicEntry } from "@/lib/database.types"
-import { startOfMonth, subMonths, format } from "date-fns"
+import { startOfMonth } from "date-fns/startOfMonth"
+import { subMonths } from "date-fns/subMonths"
+import { format } from "date-fns/format"
 
 export function useMusicMetrics(music: MusicEntry[]) {
     return useMemo(() => {

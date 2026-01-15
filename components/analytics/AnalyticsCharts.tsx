@@ -2,13 +2,8 @@
 
 import { useMemo } from "react"
 import {
-  AreaChart,
-  Area,
   BarChart,
   Bar,
-  PieChart,
-  Pie,
-  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,101 +14,20 @@ import {
 } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { MediaMetrics } from "@/hooks/useMediaMetrics"
-import { formatNumber, formatCurrency, formatDuration } from "@/lib/parsing-utils"
+import { formatCurrency, formatDuration } from "@/lib/parsing-utils"
+import {
+  CHART_COLORS,
+  ACCENT_COLOR,
+  tooltipStyle,
+  formatMonthLabel,
+  formatNumber,
+  AreaChartBase,
+  SimpleBarChart,
+  SimplePieChart,
+} from "@/components/charts"
 
 interface AnalyticsChartsProps {
   metrics: MediaMetrics
-}
-
-// Monochrome palette with accent
-const CHART_COLORS = [
-  "hsl(0, 0%, 15%)",
-  "hsl(0, 0%, 30%)",
-  "hsl(0, 0%, 45%)",
-  "hsl(0, 0%, 60%)",
-  "hsl(0, 0%, 75%)",
-  "hsl(0, 0%, 85%)",
-]
-
-const ACCENT_COLOR = "hsl(0, 0%, 10%)"
-
-// Custom tooltip style
-const tooltipStyle = {
-  backgroundColor: "hsl(0, 0%, 98%)",
-  border: "1px solid hsl(0, 0%, 90%)",
-  borderRadius: "4px",
-  padding: "8px 12px",
-  fontSize: "12px",
-  fontFamily: "monospace",
-}
-
-function formatMonthLabel(month: string): string {
-  const [year, m] = month.split("-")
-  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-  return `${monthNames[parseInt(m, 10) - 1]} ${year.slice(2)}`
-}
-
-interface TimelineChartProps {
-  data: { month: string; minutes: number }[]
-}
-
-function TimelineChart({ data }: TimelineChartProps) {
-  const chartData = useMemo(() => {
-    return data.map((d) => ({
-      month: formatMonthLabel(d.month),
-      hours: Math.round(d.minutes / 60 * 10) / 10,
-      minutes: d.minutes,
-    }))
-  }, [data])
-
-  if (chartData.length === 0) {
-    return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-        No time data available
-      </div>
-    )
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-        <defs>
-          <linearGradient id="timeGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="5%" stopColor={ACCENT_COLOR} stopOpacity={0.3} />
-            <stop offset="95%" stopColor={ACCENT_COLOR} stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" />
-        <XAxis
-          dataKey="month"
-          tick={{ fontSize: 10, fontFamily: "monospace" }}
-          tickLine={false}
-          axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-        />
-        <YAxis
-          tick={{ fontSize: 10, fontFamily: "monospace" }}
-          tickLine={false}
-          axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-          tickFormatter={(v) => `${v}h`}
-        />
-        <Tooltip
-          contentStyle={tooltipStyle}
-          formatter={(value: number | undefined, name: string | undefined) => [
-            value !== undefined && name === "hours" ? `${value}h (${formatDuration(value * 60)})` : value ?? 0,
-            "Time",
-          ]}
-        />
-        <Area
-          type="monotone"
-          dataKey="hours"
-          stroke={ACCENT_COLOR}
-          strokeWidth={2}
-          fillOpacity={1}
-          fill="url(#timeGradient)"
-        />
-      </AreaChart>
-    </ResponsiveContainer>
-  )
 }
 
 interface CostChartProps {
@@ -182,59 +96,6 @@ function CostChart({ data }: CostChartProps) {
           />
         ))}
       </BarChart>
-    </ResponsiveContainer>
-  )
-}
-
-interface GenrePieChartProps {
-  data: Record<string, number>
-  title: string
-}
-
-function GenrePieChart({ data, title }: GenrePieChartProps) {
-  const chartData = useMemo(() => {
-    return Object.entries(data)
-      .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
-      .map(([name, value]) => ({ name, value }))
-  }, [data])
-
-  if (chartData.length === 0) {
-    return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-        No {title.toLowerCase()} data
-      </div>
-    )
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={360}>
-      <PieChart>
-        <Pie
-          data={chartData}
-          cx="50%"
-          cy="50%"
-          innerRadius={70}
-          outerRadius={120}
-          paddingAngle={2}
-          dataKey="value"
-          label={({ name, percent }) =>
-            `${name} (${((percent ?? 0) * 100).toFixed(0)}%)`
-          }
-          labelLine={{ stroke: "hsl(0, 0%, 60%)", strokeWidth: 1 }}
-        >
-          {chartData.map((_, index) => (
-            <Cell
-              key={`cell-${index}`}
-              fill={CHART_COLORS[index % CHART_COLORS.length]}
-            />
-          ))}
-        </Pie>
-        <Tooltip
-          contentStyle={tooltipStyle}
-          formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Items"]}
-        />
-      </PieChart>
     </ResponsiveContainer>
   )
 }
@@ -315,52 +176,22 @@ function TreemapChart({ data, title }: TreemapChartProps) {
   )
 }
 
-interface CountByMonthChartProps {
-  data: { month: string; count: number }[]
-}
-
-function CountByMonthChart({ data }: CountByMonthChartProps) {
-  const chartData = useMemo(() => {
-    return data.map((d) => ({
-      month: formatMonthLabel(d.month),
-      count: d.count,
-    }))
-  }, [data])
-
-  if (chartData.length === 0) {
-    return (
-      <div className="h-64 flex items-center justify-center text-muted-foreground text-sm font-mono">
-        No completion data
-      </div>
-    )
-  }
-
-  return (
-    <ResponsiveContainer width="100%" height={280}>
-      <BarChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" stroke="hsl(0, 0%, 90%)" />
-        <XAxis
-          dataKey="month"
-          tick={{ fontSize: 10, fontFamily: "monospace" }}
-          tickLine={false}
-          axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-        />
-        <YAxis
-          tick={{ fontSize: 10, fontFamily: "monospace" }}
-          tickLine={false}
-          axisLine={{ stroke: "hsl(0, 0%, 80%)" }}
-        />
-        <Tooltip
-          contentStyle={tooltipStyle}
-          formatter={(value: number | undefined) => [formatNumber(value ?? 0), "Items"]}
-        />
-        <Bar dataKey="count" fill={ACCENT_COLOR} radius={[2, 2, 0, 0]} />
-      </BarChart>
-    </ResponsiveContainer>
-  )
-}
-
 export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
+  // Memoize data for shared components
+  const timelineData = useMemo(() => {
+    return metrics.minutesByMonth.map(d => ({
+      month: formatMonthLabel(d.month),
+      hours: Math.round(d.minutes / 60 * 10) / 10
+    }))
+  }, [metrics.minutesByMonth])
+
+  const completionData = useMemo(() => {
+    return metrics.countByMonth.map(d => ({
+      name: formatMonthLabel(d.month),
+      value: d.count
+    }))
+  }, [metrics.countByMonth])
+
   return (
     <div className="space-y-4">
       {/* Main row: Timeline and Cost */}
@@ -372,7 +203,15 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <TimelineChart data={metrics.minutesByMonth} />
+            <AreaChartBase
+              data={timelineData}
+              xAxisKey="month"
+              dataKey="hours"
+              height={280}
+              valueFormatter={(v) => `${v}h`}
+              valueLabel="Time"
+              formatYLabel={(v) => `${v}h`}
+            />
           </CardContent>
         </Card>
 
@@ -397,7 +236,14 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <CountByMonthChart data={metrics.countByMonth} />
+            <SimpleBarChart
+              data={completionData}
+              layout="horizontal"
+              height={280}
+              valueLabel="Items"
+              showXAxis={true}
+              showYAxis={true}
+            />
           </CardContent>
         </Card>
 
@@ -422,11 +268,9 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <GenrePieChart data={metrics.countByLanguage} title="Language" />
+            <SimplePieChart data={metrics.countByLanguage} title="Language" height={360} />
           </CardContent>
         </Card>
-
-
 
         <Card>
           <CardHeader className="pb-2">
@@ -435,7 +279,7 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <GenrePieChart data={metrics.countByPlatform} title="Platform" />
+            <SimplePieChart data={metrics.countByPlatform} title="Platform" height={360} />
           </CardContent>
         </Card>
 
@@ -446,7 +290,7 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
             </CardTitle>
           </CardHeader>
           <CardContent className="pt-0">
-            <GenrePieChart data={metrics.countByStatus} title="Status" />
+            <SimplePieChart data={metrics.countByStatus} title="Status" height={360} />
           </CardContent>
         </Card>
       </div>
@@ -455,4 +299,3 @@ export function AnalyticsCharts({ metrics }: AnalyticsChartsProps) {
 }
 
 export default AnalyticsCharts
-

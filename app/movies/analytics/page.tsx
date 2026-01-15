@@ -1,12 +1,11 @@
 "use client"
 
 import { useState, useEffect, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { getEntries } from "@/lib/actions"
 import { MediaEntry } from "@/lib/database.types"
 import { FilterState, defaultFilterState, applyFilters, extractFilterOptions } from "@/lib/filter-types"
 import { useMediaMetrics } from "@/hooks/useMediaMetrics"
-import { KPIGrid } from "@/components/analytics/KPIGrid"
-import { AnalyticsCharts } from "@/components/analytics/AnalyticsCharts"
 import { GlobalFilterBar } from "@/components/analytics/GlobalFilterBar"
 import { Loader2, AlertCircle } from "lucide-react"
 import { toast } from "sonner"
@@ -14,6 +13,29 @@ import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { AnalyticsSkeleton } from "@/components/skeletons"
 import { PageHeader } from "@/components/page-header"
+
+// Dynamic imports for chart components - reduces initial bundle size
+const KPIGrid = dynamic(
+  () => import("@/components/analytics/KPIGrid").then(m => m.KPIGrid),
+  {
+    loading: () => (
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {Array(4).fill(0).map((_, i) => (
+          <div key={i} className="h-24 bg-muted animate-pulse rounded-lg" />
+        ))}
+      </div>
+    ),
+    ssr: false
+  }
+)
+
+const AnalyticsCharts = dynamic(
+  () => import("@/components/analytics/AnalyticsCharts").then(m => m.AnalyticsCharts),
+  {
+    loading: () => <div className="h-96 bg-muted animate-pulse rounded-lg" />,
+    ssr: false
+  }
+)
 
 export default function AnalyticsPage() {
   const [entries, setEntries] = useState<MediaEntry[]>([])

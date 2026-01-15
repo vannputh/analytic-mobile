@@ -1,6 +1,14 @@
 import { useMemo } from "react"
 import { BookEntry } from "@/lib/database.types"
-import { startOfMonth, subMonths, format, parseISO, isValid, parse, startOfYear, eachMonthOfInterval, endOfYear } from "date-fns"
+import { startOfMonth } from "date-fns/startOfMonth"
+import { subMonths } from "date-fns/subMonths"
+import { format } from "date-fns/format"
+import { parseISO } from "date-fns/parseISO"
+import { isValid } from "date-fns/isValid"
+import { parse } from "date-fns/parse"
+import { startOfYear } from "date-fns/startOfYear"
+import { eachMonthOfInterval } from "date-fns/eachMonthOfInterval"
+import { endOfYear } from "date-fns/endOfYear"
 
 export function useBookMetrics(books: BookEntry[]) {
     return useMemo(() => {
@@ -97,8 +105,8 @@ export function useBookMetrics(books: BookEntry[]) {
             countByStatus,
             countByFormat,
             countByGenre,
-            booksPerMonth: Object.entries(booksPerMonth).map(([name, value]) => ({ name, value })),
-            pagesPerMonth: Object.entries(pagesPerMonth).map(([name, value]) => ({ name, value })),
+            booksPerMonth: Object.entries(booksPerMonth).map(([name, value]) => ({ name, value: value as number })),
+            pagesPerMonth: Object.entries(pagesPerMonth).map(([name, value]) => ({ name, value: value as number })),
         }
     }, [books])
 }

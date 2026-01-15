@@ -1,14 +1,23 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { MusicEntry } from "@/lib/database.types"
 import { MusicFilterState, defaultMusicFilterState, applyMusicFilters, extractMusicFilterOptions } from "@/lib/music-types"
 import { useMusicMetrics } from "@/hooks/useMusicMetrics"
-import { MusicAnalyticsCharts } from "@/components/analytics/MusicAnalyticsCharts"
 import { MusicFilterBar } from "@/components/analytics/MusicFilterBar"
 import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+
+// Dynamic import for chart component - reduces initial bundle size
+const MusicAnalyticsCharts = dynamic(
+    () => import("@/components/analytics/MusicAnalyticsCharts").then(m => m.MusicAnalyticsCharts),
+    {
+        loading: () => <div className="h-96 bg-muted animate-pulse rounded-lg" />,
+        ssr: false
+    }
+)
 
 interface MusicAnalyticsClientProps {
     music: MusicEntry[]

@@ -4,6 +4,12 @@ import { createClient } from '@/lib/supabase/server'
 import { FoodEntry, FoodEntryInsert, FoodEntryUpdate, FoodEntryImage, FoodEntryImageInsert } from '@/lib/database.types'
 import { revalidatePath } from 'next/cache'
 
+/** Revalidate food-related paths */
+function revalidateFoodPaths() {
+    revalidatePath('/food')
+    revalidatePath('/food/analytics')
+}
+
 export type ActionResponse<T> =
     | { success: true; data: T }
     | { success: false; error: string }
@@ -199,8 +205,7 @@ export async function createFoodEntry(data: FoodEntryInsert): Promise<ActionResp
             return { success: false, error: error.message }
         }
 
-        revalidatePath('/food')
-        revalidatePath('/food/analytics')
+        revalidateFoodPaths()
 
         return { success: true, data: newEntry as FoodEntry }
     } catch (error) {
@@ -229,8 +234,7 @@ export async function updateFoodEntry(id: string, data: FoodEntryUpdate): Promis
             return { success: false, error: error.message }
         }
 
-        revalidatePath('/food')
-        revalidatePath('/food/analytics')
+        revalidateFoodPaths()
 
         return { success: true, data: updatedEntry as FoodEntry }
     } catch (error) {
@@ -270,8 +274,7 @@ export async function deleteFoodEntry(id: string): Promise<ActionResponse<void>>
             return { success: false, error: error.message }
         }
 
-        revalidatePath('/food')
-        revalidatePath('/food/analytics')
+        revalidateFoodPaths()
 
         return { success: true, data: undefined }
     } catch (error) {
@@ -358,7 +361,7 @@ export async function addFoodEntryImage(data: FoodEntryImageInsert): Promise<Act
             return { success: false, error: error.message }
         }
 
-        revalidatePath('/food')
+        revalidateFoodPaths()
 
         return { success: true, data: newImage as FoodEntryImage }
     } catch (error) {
@@ -398,7 +401,7 @@ export async function deleteFoodEntryImage(imageId: string): Promise<ActionRespo
             return { success: false, error: error.message }
         }
 
-        revalidatePath('/food')
+        revalidateFoodPaths()
 
         return { success: true, data: undefined }
     } catch (error) {
@@ -432,7 +435,7 @@ export async function setFoodEntryPrimaryImage(imageId: string, entryId: string)
             return { success: false, error: error.message }
         }
 
-        revalidatePath('/food')
+        revalidateFoodPaths()
 
         return { success: true, data: undefined }
     } catch (error) {
@@ -613,124 +616,53 @@ export async function getFoodEntryPrimaryImage(entryId: string): Promise<ActionR
     }
 }
 
-// Get unique cuisine types for the dropdown
+// Generic helper to get unique values from a column
+async function getUniqueValues(
+    column: string,
+    extractor?: (data: any[]) => string[]
+): Promise<ActionResponse<string[]>> {
+    try {
+        const supabase = await createClient()
+        const { data, error } = await (supabase
+            .from('food_entries' as any) as any)
+            .select(column)
+
+        if (error) {
+            console.error(`Error fetching unique ${column}:`, error)
+            return { success: false, error: error.message }
+        }
+
+        const values = extractor
+            ? extractor(data || [])
+            : (data || []).map((e: any) => e[column]).filter(Boolean)
+
+        return { success: true, data: Array.from(new Set(values)).sort() as string[] }
+    } catch (error) {
+        console.error('Unexpected error:', error)
+        return { success: false, error: error instanceof Error ? error.message : 'Unknown error' }
+    }
+}
+
+// Get unique cuisine types (array field, excludes "Cafe")
 export async function getUniqueCuisineTypes(): Promise<ActionResponse<string[]>> {
-    try {
-        const supabase = await createClient()
-
-        // Just select the column we need
-        const { data, error } = await (supabase
-            .from('food_entries' as any) as any)
-            .select('cuisine_type')
-
-        if (error) {
-            console.error('Error fetching cuisine types:', error)
-            return { success: false, error: error.message }
-        }
-
-        // Extract unique cuisine types
-        const allCuisines = (data || [])
-            .flatMap((entry: any) => entry.cuisine_type || [])
-            .filter(Boolean) as string[]
-
-        // Filter out "Cafe" as per user request (it should be a Category)
-        const uniqueCuisines = Array.from(new Set(allCuisines))
-            .filter(c => c !== 'Cafe')
-            .sort()
-
-        return { success: true, data: uniqueCuisines }
-    } catch (error) {
-        console.error('Unexpected error:', error)
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-        }
-    }
+    return getUniqueValues('cuisine_type', (data) =>
+        data.flatMap((e: any) => e.cuisine_type || []).filter((c: string) => c && c !== 'Cafe')
+    )
 }
 
-// Get unique item categories for the dropdown (e.g., matcha, malatang, etc.)
+// Get unique item categories from items_ordered array
 export async function getUniqueItemCategories(): Promise<ActionResponse<string[]>> {
-    try {
-        const supabase = await createClient()
-
-        // Just select the column we need
-        const { data, error } = await (supabase
-            .from('food_entries' as any) as any)
-            .select('items_ordered')
-
-        if (error) {
-            console.error('Error fetching item categories:', error)
-            return { success: false, error: error.message }
-        }
-
-        // Extract unique categories from all items_ordered arrays
-        const allCategories = (data || [])
-            .flatMap((entry: any) => entry.items_ordered || [])
-            .map((item: any) => item.category)
-            .filter(Boolean) as string[]
-
-        const uniqueCategories = Array.from(new Set(allCategories)).sort() as string[]
-
-        return { success: true, data: uniqueCategories }
-    } catch (error) {
-        console.error('Unexpected error:', error)
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-        }
-    }
+    return getUniqueValues('items_ordered', (data) =>
+        data.flatMap((e: any) => e.items_ordered || []).map((item: any) => item.category).filter(Boolean)
+    )
 }
 
-// Get unique cities for the dropdown
+// Get unique cities
 export async function getUniqueCities(): Promise<ActionResponse<string[]>> {
-    try {
-        const supabase = await createClient()
-
-        const { data, error } = await (supabase
-            .from('food_entries' as any) as any)
-            .select('city')
-
-        if (error) {
-            console.error('Error fetching unique cities:', error)
-            return { success: false, error: error.message }
-        }
-
-        const uniqueCities = Array.from(new Set((data || []).map((e: any) => e.city).filter(Boolean)))
-            .sort() as string[]
-
-        return { success: true, data: uniqueCities }
-    } catch (error) {
-        console.error('Unexpected error:', error)
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-        }
-    }
+    return getUniqueValues('city')
 }
 
-// Get unique categories for the dropdown
+// Get unique categories
 export async function getUniqueCategories(): Promise<ActionResponse<string[]>> {
-    try {
-        const supabase = await createClient()
-
-        const { data, error } = await (supabase
-            .from('food_entries' as any) as any)
-            .select('category')
-
-        if (error) {
-            console.error('Error fetching unique categories:', error)
-            return { success: false, error: error.message }
-        }
-
-        const uniqueCategories = Array.from(new Set((data || []).map((e: any) => e.category).filter(Boolean)))
-            .sort() as string[]
-
-        return { success: true, data: uniqueCategories }
-    } catch (error) {
-        console.error('Unexpected error:', error)
-        return {
-            success: false,
-            error: error instanceof Error ? error.message : 'Unknown error'
-        }
-    }
+    return getUniqueValues('category')
 }

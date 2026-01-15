@@ -4,6 +4,16 @@ import { createClient } from '@/lib/supabase/server'
 import { MediaEntry, MediaStatusHistory } from '@/lib/database.types'
 import { revalidatePath } from 'next/cache'
 
+/** Revalidate all common paths after data mutations */
+function revalidateAll() {
+  revalidatePath('/')
+  revalidatePath('/dashboard')
+  revalidatePath('/movies')
+  revalidatePath('/analytics')
+  revalidatePath('/books')
+  revalidatePath('/music')
+}
+
 export type ActionResponse<T> =
   | { success: true; data: T }
   | { success: false; error: string }
@@ -33,14 +43,7 @@ export async function createEntry(data: CreateEntryInput): Promise<ActionRespons
       return { success: false, error: error.message }
     }
 
-    revalidatePath('/')
-    revalidatePath('/dashboard')
-    revalidatePath('/entries') // Keep for history/compatibility if needed, or remove
-    revalidatePath('/movies')
-    revalidatePath('/analytics')
-    revalidatePath('/library') // Keep for compatibility
-    revalidatePath('/books')
-    revalidatePath('/music')
+    revalidateAll()
 
     return { success: true, data: newEntry }
   } catch (error) {
@@ -68,13 +71,7 @@ export async function updateEntry(id: string, data: Partial<CreateEntryInput>): 
       return { success: false, error: error.message }
     }
 
-    revalidatePath('/')
-    revalidatePath('/dashboard')
-    revalidatePath('/entries')
-    revalidatePath('/analytics')
-    revalidatePath('/library')
-    revalidatePath('/books')
-    revalidatePath('/music')
+    revalidateAll()
 
     return { success: true, data: updatedEntry }
   } catch (error) {
@@ -125,13 +122,7 @@ export async function deleteEntry(id: string): Promise<ActionResponse<void>> {
       return { success: false, error: error.message }
     }
 
-    revalidatePath('/')
-    revalidatePath('/dashboard')
-    revalidatePath('/entries')
-    revalidatePath('/analytics')
-    revalidatePath('/library')
-    revalidatePath('/books')
-    revalidatePath('/music')
+    revalidateAll()
 
     return { success: true, data: undefined }
   } catch (error) {
@@ -171,13 +162,7 @@ export async function batchUploadEntries(entries: CreateEntryInput[]): Promise<A
       results.push(...(data || []))
     }
 
-    revalidatePath('/')
-    revalidatePath('/dashboard')
-    revalidatePath('/entries')
-    revalidatePath('/analytics')
-    revalidatePath('/library')
-    revalidatePath('/books')
-    revalidatePath('/music')
+    revalidateAll()
 
     return {
       success: true,
@@ -425,13 +410,7 @@ export async function restartEntry(id: string): Promise<ActionResponse<MediaEntr
       return { success: false, error: updateError.message }
     }
 
-    revalidatePath('/')
-    revalidatePath('/dashboard')
-    revalidatePath('/entries')
-    revalidatePath('/analytics')
-    revalidatePath('/library')
-    revalidatePath('/books')
-    revalidatePath('/music')
+    revalidateAll()
 
     return { success: true, data: updatedEntry }
   } catch (error) {

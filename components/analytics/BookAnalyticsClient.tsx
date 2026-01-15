@@ -1,14 +1,23 @@
 "use client"
 
 import { useState, useMemo } from "react"
+import dynamic from "next/dynamic"
 import { BookEntry } from "@/lib/database.types"
 import { BookFilterState, defaultBookFilterState, applyBookFilters, extractBookFilterOptions } from "@/lib/book-types"
 import { useBookMetrics } from "@/hooks/useBookMetrics"
-import { BookAnalyticsCharts } from "@/components/analytics/BookAnalyticsCharts"
 import { BookFilterBar } from "@/components/analytics/BookFilterBar"
 import { AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
+
+// Dynamic import for chart component - reduces initial bundle size
+const BookAnalyticsCharts = dynamic(
+    () => import("@/components/analytics/BookAnalyticsCharts").then(m => m.BookAnalyticsCharts),
+    {
+        loading: () => <div className="h-96 bg-muted animate-pulse rounded-lg" />,
+        ssr: false
+    }
+)
 
 interface BookAnalyticsClientProps {
     books: BookEntry[]

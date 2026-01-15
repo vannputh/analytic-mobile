@@ -7,11 +7,17 @@ import "./globals.css"
 const mono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
+  display: 'swap',
+  preload: true,
+  adjustFontFallback: false,
 })
 
 const sans = Space_Grotesk({
   subsets: ["latin"],
   variable: "--font-sans",
+  display: 'swap',
+  preload: true,
+  adjustFontFallback: false,
 })
 
 export const metadata: Metadata = {

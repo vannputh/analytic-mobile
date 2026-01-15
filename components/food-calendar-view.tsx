@@ -9,6 +9,7 @@ import { FoodEntry } from "@/lib/database.types"
 import { getFoodEntriesByMonth } from "@/lib/food-actions"
 import { FoodEntryCard } from "./food-entry-card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CalendarDayCell } from "@/components/food/CalendarDayCell"
 
 interface FoodCalendarViewProps {
     onAddEntry: () => void
@@ -180,60 +181,20 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
                 <div className="grid grid-cols-7">
                     {calendarDays.map((dayInfo, index) => {
                         const entries = entriesByDate[dayInfo.date] || []
-                        const hasEntries = entries.length > 0
                         const isSelected = selectedDate === dayInfo.date
 
                         return (
-                            <button
+                            <CalendarDayCell
                                 key={`${dayInfo.date}-${index}`}
-                                type="button"
+                                date={dayInfo.date}
+                                day={dayInfo.day}
+                                isCurrentMonth={dayInfo.isCurrentMonth}
+                                isToday={dayInfo.isToday}
+                                isSelected={isSelected}
+                                entries={entries}
+                                loading={loading}
                                 onClick={() => setSelectedDate(isSelected ? null : dayInfo.date)}
-                                className={cn(
-                                    "relative min-h-[60px] sm:min-h-[80px] p-1 sm:p-2 border-b border-r text-left transition-colors",
-                                    "hover:bg-muted/50 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-inset",
-                                    !dayInfo.isCurrentMonth && "bg-muted/30 text-muted-foreground",
-                                    isSelected && "bg-primary/10 ring-2 ring-primary ring-inset",
-                                    dayInfo.isToday && "bg-accent/50"
-                                )}
-                            >
-                                {/* Day Number */}
-                                <span
-                                    className={cn(
-                                        "inline-flex items-center justify-center text-xs sm:text-sm font-medium",
-                                        "h-5 w-5 sm:h-6 sm:w-6 rounded-full",
-                                        dayInfo.isToday && "bg-primary text-primary-foreground"
-                                    )}
-                                >
-                                    {dayInfo.day}
-                                </span>
-
-                                {/* Entry Indicators */}
-                                {loading && dayInfo.isCurrentMonth ? (
-                                    <div className="mt-1">
-                                        <Skeleton className="h-2 w-full" />
-                                    </div>
-                                ) : hasEntries ? (
-                                    <div className="mt-1 space-y-0.5">
-                                        {entries.slice(0, 2).map((entry) => (
-                                            <div
-                                                key={entry.id}
-                                                className="flex items-center gap-1 text-[10px] sm:text-xs truncate"
-                                                title={entry.name}
-                                            >
-                                                <span className="text-amber-500">
-                                                    {entry.overall_rating ? "★" : "•"}
-                                                </span>
-                                                <span className="truncate">{entry.name}</span>
-                                            </div>
-                                        ))}
-                                        {entries.length > 2 && (
-                                            <div className="text-[10px] text-muted-foreground">
-                                                +{entries.length - 2} more
-                                            </div>
-                                        )}
-                                    </div>
-                                ) : null}
-                            </button>
+                            />
                         )
                     })}
                 </div>

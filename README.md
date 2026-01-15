@@ -88,6 +88,16 @@ cd media-review
 bun install
 ```
 
+### Minimal install (smaller `node_modules`)
+
+If you only need to run the built application or specific scripts and don't require the full linting and tooling setup, you can install only production dependencies:
+
+```bash
+bun install --production
+```
+
+This keeps `node_modules` smaller (in this project, roughly **450 MB** with production deps only vs **~515 MB** with full dev tooling, exact numbers will vary by platform and versions). To restore the full developer experience, run `bun install` again.
+
 3. Set up environment variables:
 Create a `.env.local` file in the root directory:
 ```env

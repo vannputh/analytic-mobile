@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { MediaEntry, EpisodeWatchRecord } from "@/lib/database.types";
 import { SafeImage } from "@/components/ui/safe-image";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
 import { Plus, Minus, CalendarIcon, Loader2, Play, Clock } from "lucide-react";
-import { format, formatDistanceToNow } from "date-fns";
+import { format } from "date-fns/format"
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow"
 import { cn } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import {
@@ -18,7 +20,12 @@ import {
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
 import { getPlaceholderPoster } from "@/lib/types";
-import { MediaDetailsDialog } from "@/components/media-details-dialog";
+
+// Dynamic import for dialog component - reduces initial bundle size
+const MediaDetailsDialog = dynamic(
+    () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
+    { ssr: false }
+);
 
 interface WatchingCardProps {
     entry: MediaEntry;

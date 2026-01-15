@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { SafeImage } from "@/components/ui/safe-image";
 import { MediaEntry } from "@/lib/database.types";
 import { getPlaceholderPoster, formatDate, getTimeTaken } from "@/lib/types";
@@ -25,7 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { MoreHorizontal, Pencil, Trash2, ArrowUpDown, ArrowUp, ArrowDown, Sparkles, Loader2, CheckSquare, Square, Edit, History, RotateCcw } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Sparkles, Loader2, CheckSquare, Square, Edit, RotateCcw } from "lucide-react";
+import { BatchEditDialog } from "@/components/shared/BatchEditDialog";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
 import {
@@ -47,13 +49,18 @@ import {
 } from "@/components/ui/select";
 import { TYPE_OPTIONS, STATUS_OPTIONS, MEDIUM_OPTIONS } from "@/lib/types";
 
-import { MediaDetailsDialog } from "@/components/media-details-dialog";
+// Dynamic import for dialog component - reduces initial bundle size
+const MediaDetailsDialog = dynamic(
+  () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
+  { ssr: false }
+);
+
 import { restartEntry } from "@/lib/actions";
 import { getUserPreference, setUserPreference } from "@/lib/user-preferences";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { EpisodeWatchRecord } from "@/lib/database.types";
+import { useSortedEntries } from "@/hooks/useSortedEntries";
+import { useBatchMetadataFetch } from "@/hooks/useBatchMetadataFetch";
 
 // Parse episode history from JSON
 function parseEpisodeHistory(data: unknown): EpisodeWatchRecord[] {
@@ -146,8 +153,74 @@ export const COLUMN_DEFINITIONS: Record<ColumnKey, { label: string; defaultVisib
 };
 
 export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate, showSelectMode = false, onSelectModeChange }: MediaTableProps) {
-  const [sortColumn, setSortColumn] = useState<SortColumn>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  /* Sorting Logic via Hook */
+  const getValueForColumn = (entry: MediaEntry, column: ColumnKey) => {
+    switch (column) {
+      case "title":
+        return entry.title?.toLowerCase() || "";
+      case "type":
+        return entry.type?.toLowerCase() || "";
+      case "status":
+        return entry.status?.toLowerCase() || "";
+      case "my_rating":
+        return entry.my_rating || 0;
+      case "average_rating":
+        return entry.average_rating || 0;
+      case "genre":
+        // Sort by first genre
+        return Array.isArray(entry.genre) && entry.genre.length > 0 ? entry.genre[0].toLowerCase() : "";
+      case "platform":
+        return entry.platform?.toLowerCase() || "";
+      case "medium":
+        return entry.medium?.toLowerCase() || "";
+      case "season":
+        return entry.season || "";
+      case "episodes":
+        return entry.episodes || 0;
+      case "length":
+        // Sort by string value for now, could be improved to parse specific formats if needed
+        return entry.length || "";
+      case "language":
+        // Sort by first language
+        return Array.isArray(entry.language) && entry.language.length > 0 ? entry.language[0].toLowerCase() : "";
+      case "price":
+        return entry.price || 0;
+      case "time_taken":
+        return getTimeTaken(entry.time_taken, entry.start_date, entry.finish_date);
+      case "imdb_id":
+        return entry.imdb_id?.toLowerCase() || "";
+      case "start_date":
+        return entry.start_date ? new Date(entry.start_date).getTime() : 0;
+      case "finish_date":
+        return entry.finish_date ? new Date(entry.finish_date).getTime() : 0;
+      default:
+        return "";
+    }
+  };
+
+  const {
+    sortedEntries,
+    sortColumn,
+    sortDirection,
+    handleSort
+  } = useSortedEntries({
+    entries,
+    getValueForColumn,
+    defaultSort: { column: null, direction: null }
+  });
+
+  const getSortIcon = (column: ColumnKey) => {
+    if (sortColumn !== column) {
+      return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />;
+    }
+    if (sortDirection === "asc") {
+      return <ArrowUp className="h-4 w-4 ml-1" />;
+    }
+    if (sortDirection === "desc") {
+      return <ArrowDown className="h-4 w-4 ml-1" />;
+    }
+    return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />;
+  };
   // Initialize with defaults - will be loaded from Supabase in useEffect
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(() => {
     const defaultVisible = new Set<ColumnKey>();
@@ -159,20 +232,16 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
     return defaultVisible;
   });
   const [columnsLoaded, setColumnsLoaded] = useState(false);
-  const [fetching, setFetching] = useState(false);
-  const [fetchProgress, setFetchProgress] = useState({ current: 0, total: 0 });
   const [selectedEntries, setSelectedEntries] = useState<Set<string>>(new Set());
   const [batchEditOpen, setBatchEditOpen] = useState(false);
-  const [batchEditData, setBatchEditData] = useState({
-    type: "",
-    status: "",
-    medium: "",
-    price: "",
-    language: "",
-    episodes: "",
-    genre: "",
+
+  // Batch metadata fetch hook
+  const { fetching, fetchProgress, fetchMetadataForEntries } = useBatchMetadataFetch({
+    onComplete: () => {
+      onRefresh?.();
+      setSelectedEntries(new Set());
+    }
   });
-  const [isBatchEditing, setIsBatchEditing] = useState(false);
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedEntryForDetails, setSelectedEntryForDetails] = useState<MediaEntry | null>(null);
@@ -226,230 +295,15 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
 
 
 
-  const handleSort = (column: SortColumn) => {
-    if (sortColumn === column) {
-      if (sortDirection === "asc") {
-        setSortDirection("desc");
-      } else if (sortDirection === "desc") {
-        setSortColumn(null);
-        setSortDirection(null);
-      }
-    } else {
-      setSortColumn(column);
-      setSortDirection("asc");
-    }
-  };
 
-  const sortedEntries = useMemo(() => {
-    if (!sortColumn || !sortDirection) {
-      return entries;
-    }
-
-    return [...entries].sort((a, b) => {
-      let aValue: any;
-      let bValue: any;
-
-      switch (sortColumn) {
-        case "title":
-          aValue = a.title?.toLowerCase() || "";
-          bValue = b.title?.toLowerCase() || "";
-          break;
-        case "type":
-          aValue = a.type?.toLowerCase() || "";
-          bValue = b.type?.toLowerCase() || "";
-          break;
-        case "status":
-          aValue = a.status?.toLowerCase() || "";
-          bValue = b.status?.toLowerCase() || "";
-          break;
-        case "my_rating":
-          aValue = a.my_rating ?? 0;
-          bValue = b.my_rating ?? 0;
-          break;
-        case "average_rating":
-          aValue = a.average_rating ?? 0;
-          bValue = b.average_rating ?? 0;
-          break;
-        case "genre":
-          aValue = Array.isArray(a.genre) ? a.genre.join(", ").toLowerCase() : "";
-          bValue = Array.isArray(b.genre) ? b.genre.join(", ").toLowerCase() : "";
-          break;
-        case "platform":
-          aValue = a.platform?.toLowerCase() || "";
-          bValue = b.platform?.toLowerCase() || "";
-          break;
-        case "medium":
-          aValue = a.medium?.toLowerCase() || "";
-          bValue = b.medium?.toLowerCase() || "";
-          break;
-        case "season":
-          aValue = a.season?.toLowerCase() || "";
-          bValue = b.season?.toLowerCase() || "";
-          break;
-        case "episodes":
-          aValue = a.episodes ?? 0;
-          bValue = b.episodes ?? 0;
-          break;
-        case "length":
-          aValue = a.length?.toLowerCase() || "";
-          bValue = b.length?.toLowerCase() || "";
-          break;
-        case "language":
-          aValue = formatLanguageForDisplay(a.language).toLowerCase();
-          bValue = formatLanguageForDisplay(b.language).toLowerCase();
-          break;
-        case "price":
-          aValue = a.price ?? 0;
-          bValue = b.price ?? 0;
-          break;
-        case "time_taken":
-          aValue = a.time_taken?.toLowerCase() || "";
-          bValue = b.time_taken?.toLowerCase() || "";
-          break;
-        case "imdb_id":
-          aValue = a.imdb_id?.toLowerCase() || "";
-          bValue = b.imdb_id?.toLowerCase() || "";
-          break;
-        case "start_date":
-          aValue = a.start_date ? new Date(a.start_date).getTime() : 0;
-          bValue = b.start_date ? new Date(b.start_date).getTime() : 0;
-          break;
-        case "finish_date":
-          aValue = a.finish_date ? new Date(a.finish_date).getTime() : 0;
-          bValue = b.finish_date ? new Date(b.finish_date).getTime() : 0;
-          break;
-        default:
-          return 0;
-      }
-
-      if (aValue === bValue) return 0;
-      const comparison = aValue < bValue ? -1 : 1;
-      return sortDirection === "asc" ? comparison : -comparison;
-    });
-  }, [entries, sortColumn, sortDirection]);
-
-  const getSortIcon = (column: SortColumn) => {
-    if (sortColumn !== column) {
-      return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />;
-    }
-    if (sortDirection === "asc") {
-      return <ArrowUp className="h-4 w-4 ml-1" />;
-    }
-    if (sortDirection === "desc") {
-      return <ArrowDown className="h-4 w-4 ml-1" />;
-    }
-    return <ArrowUpDown className="h-4 w-4 ml-1 opacity-50" />;
-  };
 
   async function batchFetchMetadata() {
     if (selectedEntries.size === 0) {
       toast.error("Please select entries to fetch");
       return;
     }
-
     const entriesToFetch = sortedEntries.filter(e => selectedEntries.has(e.id));
-
-    if (entriesToFetch.length === 0) {
-      toast.error("No entries selected");
-      return;
-    }
-
-    setFetching(true);
-    setFetchProgress({ current: 0, total: entriesToFetch.length });
-
-    let successCount = 0;
-    let failedCount = 0;
-
-    try {
-      for (let i = 0; i < entriesToFetch.length; i++) {
-        const entry = entriesToFetch[i];
-
-        if (!entry.title?.trim()) {
-          setFetchProgress({ current: i + 1, total: entriesToFetch.length });
-          continue;
-        }
-
-        try {
-          let url = `/api/metadata?title=${encodeURIComponent(entry.title.trim())}`;
-
-          // Pass medium parameter for books (Google Books API)
-          if (entry.medium === "Book") {
-            url += `&medium=${encodeURIComponent(entry.medium)}`;
-          } else if (entry.medium) {
-            // Map medium values to OMDB type for movies and TV shows
-            const typeMap: Record<string, string> = {
-              "Movie": "movie",
-              "TV Show": "series",
-            };
-            const omdbType = typeMap[entry.medium];
-            if (omdbType) {
-              url += `&type=${omdbType}`;
-            }
-          }
-
-          if (entry.season) {
-            url += `&season=${encodeURIComponent(entry.season)}`;
-          }
-
-          const response = await fetch(url);
-
-          if (response.ok) {
-            const meta = await response.json();
-
-            // Update entry in database (don't update type or medium)
-            const updateData: any = {};
-            // Note: type and medium are NOT updated to preserve user's categorization
-            if (meta.genre && !entry.genre) {
-              updateData.genre = Array.isArray(meta.genre) ? meta.genre : meta.genre.split(",").map((g: string) => g.trim()).filter(Boolean);
-            }
-            if (meta.language && !entry.language) {
-              updateData.language = Array.isArray(meta.language) ? meta.language : meta.language.split(",").map((l: string) => l.trim()).filter(Boolean);
-            }
-            if (meta.average_rating && !entry.average_rating) updateData.average_rating = meta.average_rating;
-            if (meta.length && !entry.length) updateData.length = meta.length;
-            if (meta.episodes && !entry.episodes) updateData.episodes = meta.episodes;
-            if (meta.poster_url && !entry.poster_url) updateData.poster_url = meta.poster_url;
-            if (meta.season && !entry.season) updateData.season = meta.season;
-            if (meta.imdb_id && !entry.imdb_id) updateData.imdb_id = meta.imdb_id;
-
-            if (Object.keys(updateData).length > 0) {
-              const { error } = await (supabase
-                .from("media_entries" as any) as any)
-                .update(updateData)
-                .eq("id", entry.id);
-
-              if (error) throw error;
-              successCount++;
-            }
-          } else {
-            failedCount++;
-          }
-        } catch (err) {
-          console.error(`Failed to fetch metadata for "${entry.title}":`, err);
-          failedCount++;
-        }
-
-        setFetchProgress({ current: i + 1, total: entriesToFetch.length });
-
-        if (i < entriesToFetch.length - 1) {
-          await new Promise(resolve => setTimeout(resolve, 200));
-        }
-      }
-
-      if (successCount > 0) {
-        toast.success(`Fetched metadata for ${successCount} items${failedCount > 0 ? `, ${failedCount} failed` : ""}`);
-        onRefresh?.();
-        setSelectedEntries(new Set());
-      } else if (failedCount > 0) {
-        toast.error(`Failed to fetch metadata for ${failedCount} items`);
-      }
-    } catch (error) {
-      console.error("Batch fetch error:", error);
-      toast.error("Failed to batch fetch metadata");
-    } finally {
-      setFetching(false);
-      setFetchProgress({ current: 0, total: 0 });
-    }
+    await fetchMetadataForEntries(entriesToFetch);
   }
 
   const toggleColumn = (column: ColumnKey) => {
@@ -470,148 +324,16 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
   const allSelected = sortedEntries.length > 0 && selectedEntries.size === sortedEntries.length;
   const someSelected = selectedEntries.size > 0 && selectedEntries.size < sortedEntries.length;
 
-  async function batchEdit() {
-    if (selectedEntries.size === 0) {
-      toast.error("Please select entries to edit");
-      return;
-    }
+  // Get selected entries for batch edit dialog
+  const selectedEntriesArray = useMemo(() =>
+    sortedEntries.filter(e => selectedEntries.has(e.id)),
+    [sortedEntries, selectedEntries]
+  );
 
-    const entriesToEdit = sortedEntries.filter(e => selectedEntries.has(e.id));
-    const updateData: Partial<MediaEntry> = {};
-    if (batchEditData.type && batchEditData.type !== "no-change") updateData.type = batchEditData.type;
-    if (batchEditData.status && batchEditData.status !== "no-change") updateData.status = batchEditData.status;
-    if (batchEditData.medium && batchEditData.medium !== "no-change") updateData.medium = batchEditData.medium;
-
-    // Handle price: empty string means keep current, any value means update
-    if (batchEditData.price !== "" && batchEditData.price !== "no-change") {
-      const priceValue = parseFloat(batchEditData.price);
-      if (!isNaN(priceValue) && priceValue >= 0) {
-        updateData.price = priceValue;
-      }
-    }
-
-    // Handle language: parse comma-separated languages and normalize
-    if (batchEditData.language !== "" && batchEditData.language !== "no-change") {
-      // Normalize will handle string splitting and cleaning
-      const languages = normalizeLanguage(batchEditData.language);
-      updateData.language = languages.length > 0 ? languages : null;
-    }
-
-    // Handle episodes: empty string means keep current, any value means update
-    if (batchEditData.episodes !== "" && batchEditData.episodes !== "no-change") {
-      const episodesValue = parseInt(batchEditData.episodes);
-      if (!isNaN(episodesValue) && episodesValue >= 0) {
-        updateData.episodes = episodesValue;
-      }
-    }
-
-    // Handle genre: parse comma-separated genres and merge with existing
-    let genresToAdd: string[] = [];
-    if (batchEditData.genre && batchEditData.genre.trim() !== "") {
-      genresToAdd = batchEditData.genre
-        .split(",")
-        .map((g) => g.trim())
-        .filter((g) => g.length > 0);
-    }
-
-    // If we have genres to add, we need to update each entry individually to merge genres
-    const hasGenreUpdate = genresToAdd.length > 0;
-    const hasOtherUpdates = Object.keys(updateData).length > 0;
-
-    if (!hasGenreUpdate && !hasOtherUpdates) {
-      toast.error("Please select at least one field to update");
-      return;
-    }
-
-    setIsBatchEditing(true);
-    try {
-      if (hasGenreUpdate) {
-        // Update each entry individually to merge genres
-        let successCount = 0;
-        let failedCount = 0;
-
-        for (const entry of entriesToEdit) {
-          try {
-            // Preserve original case of existing genres
-            const currentGenres = Array.isArray(entry.genre)
-              ? entry.genre.map((g) => g.trim()).filter((g) => g.length > 0)
-              : [];
-
-            // Create a map of lowercase -> original case for existing genres
-            const existingGenreMap = new Map<string, string>();
-            currentGenres.forEach((g) => {
-              existingGenreMap.set(g.toLowerCase(), g);
-            });
-
-            // Add new genres, checking for duplicates (case-insensitive)
-            const mergedGenres = [...currentGenres];
-            genresToAdd.forEach((newGenre) => {
-              const normalized = newGenre.toLowerCase();
-              if (!existingGenreMap.has(normalized)) {
-                mergedGenres.push(newGenre);
-                existingGenreMap.set(normalized, newGenre);
-              }
-            });
-
-            const entryUpdateData: Partial<MediaEntry> = { ...updateData, genre: mergedGenres };
-
-            const { error } = await (supabase
-              .from("media_entries" as any) as any)
-              .update(entryUpdateData)
-              .eq("id", entry.id);
-
-            if (error) throw error;
-            successCount++;
-          } catch (err) {
-            console.error(`Failed to update entry ${entry.id}:`, err);
-            failedCount++;
-          }
-        }
-
-        if (successCount > 0) {
-          toast.success(`Updated ${successCount} entries${failedCount > 0 ? `, ${failedCount} failed` : ""}`);
-        }
-        if (failedCount > 0 && successCount === 0) {
-          toast.error(`Failed to update ${failedCount} entries`);
-        }
-      } else {
-        // No genre update, use batch update for other fields
-        const { error } = await (supabase
-          .from("media_entries" as any) as any)
-          .update(updateData)
-          .in("id", Array.from(selectedEntries));
-
-        if (error) throw error;
-
-        toast.success(`Updated ${selectedEntries.size} entries`);
-      }
-
-      // Reset state and close dialog
-      setBatchEditData({ type: "", status: "", medium: "", price: "", language: "", episodes: "", genre: "" });
-      setSelectedEntries(new Set());
-      onRefresh?.();
-
-      // Close dialog after a brief delay to ensure state updates
-      setTimeout(() => {
-        setBatchEditOpen(false);
-        setIsBatchEditing(false);
-      }, 100);
-    } catch (error) {
-      console.error("Batch edit error:", error);
-      toast.error("Failed to update entries");
-      setIsBatchEditing(false);
-    }
-  }
-
-  const handleBatchEditDialogChange = (open: boolean) => {
-    if (!isBatchEditing) {
-      setBatchEditOpen(open);
-      if (!open) {
-        // Reset form when closing
-        setBatchEditData({ type: "", status: "", medium: "", price: "", language: "", episodes: "", genre: "" });
-      }
-    }
-  }
+  const handleBatchEditSuccess = () => {
+    setSelectedEntries(new Set());
+    onRefresh?.();
+  };
 
   const toggleSelectAll = () => {
     if (allSelected) {
@@ -1174,178 +896,12 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
       </div>
 
       {/* Batch Edit Dialog */}
-      <Dialog open={batchEditOpen} onOpenChange={handleBatchEditDialogChange}>
-        <DialogContent className="max-w-3xl max-h-[90vh] flex flex-col p-0">
-          <DialogHeader className="flex-shrink-0 px-6 pt-6 pb-4">
-            <DialogTitle className="text-xl">Batch Edit {selectedEntries.size} Entries</DialogTitle>
-            <DialogDescription>
-              Update the selected fields for all selected entries. Leave fields empty or select "Keep current" to preserve existing values.
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto px-6 min-h-0">
-            <div className="space-y-6 py-4">
-              {/* Basic Information Section */}
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold mb-3">Basic Information</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="batch-type">Type</Label>
-                      <Select
-                        value={batchEditData.type}
-                        onValueChange={(value) => setBatchEditData(prev => ({ ...prev, type: value }))}
-                        disabled={isBatchEditing}
-                      >
-                        <SelectTrigger id="batch-type">
-                          <SelectValue placeholder="Keep current" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="no-change">Keep current</SelectItem>
-                          {TYPE_OPTIONS.map((t) => (
-                            <SelectItem key={t} value={t}>
-                              {t}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="batch-status">Status</Label>
-                      <Select
-                        value={batchEditData.status}
-                        onValueChange={(value) => setBatchEditData(prev => ({ ...prev, status: value }))}
-                        disabled={isBatchEditing}
-                      >
-                        <SelectTrigger id="batch-status">
-                          <SelectValue placeholder="Keep current" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="no-change">Keep current</SelectItem>
-                          {STATUS_OPTIONS.map((s) => (
-                            <SelectItem key={s} value={s}>
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="batch-medium">Medium</Label>
-                      <Select
-                        value={batchEditData.medium}
-                        onValueChange={(value) => setBatchEditData(prev => ({ ...prev, medium: value }))}
-                        disabled={isBatchEditing}
-                      >
-                        <SelectTrigger id="batch-medium">
-                          <SelectValue placeholder="Keep current" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="no-change">Keep current</SelectItem>
-                          {MEDIUM_OPTIONS.map((m) => (
-                            <SelectItem key={m} value={m}>
-                              {m}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <Separator />
-
-              {/* Details Section */}
-              <div className="space-y-4">
-                <div>
-                  <h3 className="text-sm font-semibold mb-3">Details</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="batch-price">Price</Label>
-                      <Input
-                        id="batch-price"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        placeholder="Keep current (leave empty)"
-                        value={batchEditData.price}
-                        onChange={(e) => setBatchEditData(prev => ({ ...prev, price: e.target.value }))}
-                        disabled={isBatchEditing}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="batch-episodes">Number of Episodes</Label>
-                      <Input
-                        id="batch-episodes"
-                        type="number"
-                        min="0"
-                        placeholder="Keep current (leave empty)"
-                        value={batchEditData.episodes}
-                        onChange={(e) => setBatchEditData(prev => ({ ...prev, episodes: e.target.value }))}
-                        disabled={isBatchEditing}
-                      />
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="batch-language">Language</Label>
-                      <Input
-                        id="batch-language"
-                        type="text"
-                        placeholder="Comma-separated (e.g., English, Spanish) - leave empty to keep current"
-                        value={batchEditData.language}
-                        onChange={(e) => setBatchEditData(prev => ({ ...prev, language: e.target.value }))}
-                        disabled={isBatchEditing}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Separate multiple languages with commas
-                      </p>
-                    </div>
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="batch-genre">Genre</Label>
-                      <Input
-                        id="batch-genre"
-                        type="text"
-                        placeholder="Comma-separated (e.g., Action, Drama) - leave empty to keep current"
-                        value={batchEditData.genre}
-                        onChange={(e) => setBatchEditData(prev => ({ ...prev, genre: e.target.value }))}
-                        disabled={isBatchEditing}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        Genres will be added to existing genres, not replaced
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter className="flex-shrink-0 px-6 pb-6 pt-4 border-t">
-            <Button
-              variant="outline"
-              onClick={() => handleBatchEditDialogChange(false)}
-              disabled={isBatchEditing}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={batchEdit}
-              disabled={isBatchEditing}
-            >
-              {isBatchEditing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Updating...
-                </>
-              ) : (
-                `Update ${selectedEntries.size} Entries`
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-
+      <BatchEditDialog
+        open={batchEditOpen}
+        onOpenChange={setBatchEditOpen}
+        selectedEntries={selectedEntriesArray}
+        onSuccess={handleBatchEditSuccess}
+      />
 
       {/* Media Details Dialog */}
       <MediaDetailsDialog

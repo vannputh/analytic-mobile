@@ -1,7 +1,5 @@
 "use client"
 
-export const dynamic = 'force-dynamic'
-
 import { useState, useCallback } from "react"
 import { FoodEntry } from "@/lib/database.types"
 import { FoodCalendarView } from "@/components/food-calendar-view"

@@ -1,463 +1,68 @@
 "use client"
 
-import { useState, useEffect, Suspense } from "react"
-import { useRouter, useSearchParams } from "next/navigation"
-import { MediaEntry } from "@/lib/database.types"
-import { createEntry, updateEntry, CreateEntryInput, getUniqueFieldValues, getEntry } from "@/lib/actions"
+import { Suspense, useEffect } from "react"
+import { useSearchParams, useRouter } from "next/navigation"
 import { PageHeader } from "@/components/page-header"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Loader2, Save, Download, Upload, X } from "lucide-react"
+import { Loader2, Save, Upload } from "lucide-react"
 import { toast } from "sonner"
-import { SafeImage } from "@/components/ui/safe-image"
-import { differenceInDays, parseISO, isValid } from "date-fns"
+import { useMediaMetadata } from "@/hooks/useMediaMetadata"
+import { useMediaForm } from "@/hooks/useMediaForm"
+import { MetadataOverrideDialog } from "@/components/movies/MetadataOverrideDialog"
+import { BasicDetailsSection } from "@/components/movies/forms/BasicDetailsSection"
+import { ClassificationSection } from "@/components/movies/forms/ClassificationSection"
+import { MediaDetailsSection } from "@/components/movies/forms/MediaDetailsSection"
+import { RatingSection } from "@/components/movies/forms/RatingSection"
+import { DatesSection } from "@/components/movies/forms/DatesSection"
+import { PosterSection } from "@/components/movies/forms/PosterSection"
 
 function AddPageContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
+  const router = useRouter()
   const entryId = searchParams.get("id")
+  const returnTo = searchParams.get("returnTo")
 
-  const [loading, setLoading] = useState(false)
-  const [fetching, setFetching] = useState(false)
-  const [fetchingMetadata, setFetchingMetadata] = useState(false)
-  const [fetchingSource, setFetchingSource] = useState<"omdb" | "tmdb" | null>(null)
-  const [showOverrideDialog, setShowOverrideDialog] = useState(false)
-  const [pendingMetadata, setPendingMetadata] = useState<any>(null)
-  const [overrideFields, setOverrideFields] = useState<Record<string, boolean>>({
-    title: true,
-    poster_url: true,
-    genre: true,
-    language: true,
-    average_rating: true,
-    length: true,
-    episodes: true,
-    imdb_id: true,
-  })
-  const [uploadingImage, setUploadingImage] = useState(false)
-  const [genreInput, setGenreInput] = useState("")
-  const [languageInput, setLanguageInput] = useState("")
-  const [dropdownOptions, setDropdownOptions] = useState<{
-    types: string[]
-    statuses: string[]
-    mediums: string[]
-    platforms: string[]
-  }>({
-    types: [],
-    statuses: [],
-    mediums: [],
-    platforms: [],
-  })
-  const [showNewInput, setShowNewInput] = useState<{
-    type: boolean
-    status: boolean
-    medium: boolean
-    platform: boolean
-  }>({
-    type: false,
-    status: false,
-    medium: false,
-    platform: false,
-  })
-  const [newValue, setNewValue] = useState<{
-    type: string
-    status: string
-    medium: string
-    platform: string
-  }>({
-    type: "",
-    status: "",
-    medium: "",
-    platform: "",
-  })
-  const [formData, setFormData] = useState<Partial<CreateEntryInput>>({
-    title: "",
-    medium: null,
-    type: null,
-    season: null,
-    episodes: null,
-    length: null,
-    price: null,
-    language: null,
-    platform: null,
-    status: null,
-    genre: null,
-    my_rating: null,
-    average_rating: null,
-    rating: null,
-    start_date: null,
-    finish_date: null,
-    time_taken: null,
-    poster_url: null,
-    imdb_id: null,
-  })
+  const { fetchMetadata, fetching: fetchingMetadata, fetchingSource, detectISBN, detectIMDbID } = useMediaMetadata()
 
-  // Fetch dropdown options from database
-  useEffect(() => {
-    async function fetchOptions() {
-      const result = await getUniqueFieldValues()
-      if (result.success) {
-        setDropdownOptions(result.data)
-      }
-    }
-    fetchOptions()
-  }, [])
+  const {
+    formData,
+    setFormData,
+    loading,
+    fetching,
+    uploadingImage,
+    genreInput,
+    languageInput,
+    dropdownOptions,
+    setDropdownOptions,
+    showNewInput,
+    setShowNewInput,
+    newValue,
+    setNewValue,
+    handleGenreChange,
+    handleLanguageChange,
+    handleImageUpload,
+    handleSubmit,
+    // Metadata dialog state
+    showOverrideDialog,
+    setShowOverrideDialog,
+    pendingMetadata,
+    setPendingMetadata,
+    overrideFields,
+    setOverrideFields,
+    applyMetadata,
+    handleConfirmOverride,
+    handleCancelOverride
+  } = useMediaForm(entryId)
 
-  // Fetch existing entry if editing
-  useEffect(() => {
-    let cancelled = false
-
-    async function fetchEntry() {
-      if (!entryId) {
-        setFetching(false)
-        return
-      }
-
-      setFetching(true)
-      try {
-        const result = await getEntry(entryId)
-
-        if (cancelled) return
-
-        if (!result.success) {
-          console.error("Error fetching entry:", result.error)
-          toast.error(result.error || "Failed to load entry")
-
-          router.push("/movies/analytics")
-          return
-        }
-
-        const data = result.data
-        const genreArray = Array.isArray(data.genre) ? data.genre : data.genre ? [data.genre] : null
-        const languageArray = (() => {
-          const lang = data.language as string[] | string | null | undefined;
-          if (!lang) return null;
-          if (Array.isArray(lang)) return lang;
-          if (typeof lang === 'string') {
-            // Try to parse as JSON first (in case it's stored as JSON string like "[\"Korean\"]")
-            try {
-              const parsed = JSON.parse(lang);
-              if (Array.isArray(parsed)) {
-                return parsed.filter((l: any) => l && typeof l === 'string').map((l: string) => l.trim()).filter(Boolean);
-              }
-            } catch {
-              // Not JSON, continue with comma-separated parsing
-            }
-            // Handle comma-separated string
-            return lang.split(",").map((l: string) => l.trim()).filter(Boolean);
-          }
-          return null;
-        })()
-
-        if (cancelled) return
-
-        setFormData({
-          title: data.title || "",
-          medium: data.medium || null,
-          type: data.type || null,
-          season: data.season || null,
-          episodes: data.episodes || null,
-          length: data.length || null,
-          price: data.price || null,
-          language: languageArray,
-          platform: data.platform || null,
-          status: data.status || null,
-          genre: genreArray,
-          my_rating: data.my_rating || null,
-          average_rating: data.average_rating || null,
-          rating: data.rating || null,
-          start_date: data.start_date || null,
-          finish_date: data.finish_date || null,
-          time_taken: data.time_taken || null,
-          poster_url: data.poster_url || null,
-          imdb_id: data.imdb_id || null,
-        })
-        setGenreInput(genreArray ? genreArray.join(", ") : "")
-        setLanguageInput(languageArray ? languageArray.join(", ") : "")
-      } catch (err) {
-        if (cancelled) return
-        console.error("Error fetching entry:", err)
-        toast.error("Failed to load entry")
-        router.push("/movies/analytics")
-      } finally {
-        if (!cancelled) {
-          setFetching(false)
-        }
-      }
-    }
-
-    fetchEntry()
-
-    return () => {
-      cancelled = true
-    }
-  }, [entryId, router])
-
-  // Auto-calculate time_taken when start_date or finish_date changes
-  useEffect(() => {
-    if (formData.start_date && formData.finish_date) {
-      try {
-        const start = parseISO(formData.start_date)
-        const finish = parseISO(formData.finish_date)
-        if (isValid(start) && isValid(finish)) {
-          const days = differenceInDays(finish, start)
-          if (days >= 0) {
-            // Add 1 to make it inclusive (same day = 1 day)
-            const totalDays = days + 1
-            const calculatedTimeTaken = totalDays === 1 ? "1 day" : `${totalDays} days`
-            setFormData((prev) => ({ ...prev, time_taken: calculatedTimeTaken }))
-          }
-        }
-      } catch (error) {
-        // Invalid date format, ignore
-      }
-    } else {
-      // Clear time_taken if dates are incomplete
-      setFormData((prev) => ({ ...prev, time_taken: null }))
-    }
-  }, [formData.start_date, formData.finish_date])
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-
-    if (!formData.title || formData.title.trim() === "") {
-      toast.error("Title is required")
-      return
-    }
-
-    setLoading(true)
-
-    try {
-      const entryData: CreateEntryInput = {
-        title: formData.title.trim(),
-        medium: formData.medium || null,
-        type: formData.type || null,
-        season: formData.season?.trim() || null,
-        episodes: formData.episodes || null,
-        length: formData.length?.trim() || null,
-        price: formData.price || null,
-        language: formData.language && formData.language.length > 0 ? formData.language : null,
-        platform: formData.platform?.trim() || null,
-        status: formData.status || null,
-        genre: formData.genre && formData.genre.length > 0 ? formData.genre : null,
-        my_rating: formData.my_rating || null,
-        average_rating: formData.average_rating || null,
-        rating: formData.rating || null,
-        start_date: formData.start_date || null,
-        finish_date: formData.finish_date || null,
-        time_taken: formData.time_taken?.trim() || null,
-        poster_url: formData.poster_url?.trim() || null,
-        imdb_id: formData.imdb_id?.trim() || null,
-      }
-
-      if (entryId) {
-        const result = await updateEntry(entryId, entryData)
-        if (result.success) {
-          toast.success("Entry updated successfully")
-          // Use returnTo URL if provided, otherwise default to /entries
-          const returnTo = searchParams.get("returnTo")
-          router.push(returnTo || "/movies")
-        } else {
-          toast.error(result.error || "Failed to update entry")
-        }
-      } else {
-        const result = await createEntry(entryData)
-        if (result.success) {
-          toast.success("Entry created successfully")
-          router.push("/movies/analytics")
-        } else {
-          toast.error(result.error || "Failed to create entry")
-        }
-      }
-    } catch (error) {
-      console.error("Error saving entry:", error)
-      toast.error("An unexpected error occurred")
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleGenreChange = (value: string) => {
-    // Allow free typing - store raw input value
-    setGenreInput(value)
-    // Process into array in real-time for formData
-    const genres = value
-      .split(",")
-      .map((g) => g.trim())
-      .filter((g) => g.length > 0)
-    setFormData({ ...formData, genre: genres.length > 0 ? genres : null })
-  }
-
-  const handleLanguageChange = (value: string) => {
-    // Allow free typing - store raw input value
-    setLanguageInput(value)
-    // Process into array in real-time for formData
-    const languages = value
-      .split(",")
-      .map((l) => l.trim())
-      .filter((l) => l.length > 0)
-    setFormData({ ...formData, language: languages.length > 0 ? languages : null })
-  }
-
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (!file) return
-
-    // Validate file type
-    if (!file.type.startsWith('image/')) {
-      toast.error('Please select an image file')
-      return
-    }
-
-    // Validate file size (10MB)
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error('File size must be less than 10MB')
-      return
-    }
-
-    setUploadingImage(true)
-
-    try {
-      const uploadFormData = new FormData()
-      uploadFormData.append('file', file)
-      // Pass title if available for naming the file
-      if (formData.title && formData.title.trim()) {
-        uploadFormData.append('title', formData.title.trim())
-      }
-
-      const response = await fetch('/api/upload', {
-        method: 'POST',
-        body: uploadFormData,
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to upload image')
-      }
-
-      if (data.success && data.url) {
-        setFormData((prev) => ({ ...prev, poster_url: data.url }))
-        toast.success('Image uploaded successfully')
-      } else {
-        throw new Error('Invalid response from server')
-      }
-    } catch (error) {
-      console.error('Error uploading image:', error)
-      toast.error(error instanceof Error ? error.message : 'Failed to upload image')
-    } finally {
-      setUploadingImage(false)
-      // Reset file input
-      e.target.value = ''
-    }
-  }
-
-  // Helper function to detect if a string is an ISBN
-  const detectISBN = (input: string | null | undefined): string | null => {
-    if (!input) return null
-    // Remove all non-alphanumeric characters (keep digits and X)
-    const cleaned = input.trim().replace(/[^0-9X]/g, '')
-
-    // Check for ISBN-13 (13 digits, starting with 978 or 979)
-    if (/^(978|979)\d{10}$/.test(cleaned)) {
-      return cleaned
-    }
-
-    // Check for ISBN-10 (10 digits, may end with X)
-    if (/^\d{9}[\dX]$/.test(cleaned)) {
-      return cleaned
-    }
-
-    return null
-  }
-
-  // Helper function to detect if a string is an IMDb ID
-  const detectIMDbID = (input: string | null | undefined): boolean => {
-    if (!input) return false
-    const trimmed = input.trim()
-    // IMDb IDs start with "tt" followed by 7-8 digits
-    return /^tt\d{7,8}$/i.test(trimmed)
-  }
-
+  // Handle metadata fetching interaction
   const handleFetchMetadata = async (source: "omdb" | "tmdb") => {
-    // Check if ISBN or IMDb ID is provided in imdb_id field
-    const isbn = detectISBN(formData.imdb_id)
-    const isImdbId = detectIMDbID(formData.imdb_id)
-    const hasTitle = formData.title?.trim()
-
-    if (!hasTitle && !isbn && !isImdbId) {
-      toast.error("Please enter a title, ISBN, or IMDb ID first")
-      return
-    }
-
-    setFetchingMetadata(true)
-    setFetchingSource(source)
     try {
-      // Build URL with search query and optional parameters
-      let url = ""
-
-      if (isbn || isImdbId) {
-        // If ISBN or IMDb ID is provided, pass it as imdb_id parameter
-        url = `/api/metadata?imdb_id=${encodeURIComponent(formData.imdb_id!.trim())}&source=${source}`
-
-        // Also pass title if available (for fallback or additional context)
-        if (hasTitle) {
-          url += `&title=${encodeURIComponent(hasTitle)}`
-        }
-      } else {
-        // Use title for search
-        url = `/api/metadata?title=${encodeURIComponent(hasTitle!)}&source=${source}`
-      }
-
-      if (formData.medium) {
-        // Pass medium parameter for books (Google Books API)
-        if (formData.medium === "Book") {
-          url += `&medium=${encodeURIComponent(formData.medium)}`
-        } else {
-          // Map our medium values to OMDB type for movies and TV shows
-          const typeMap: Record<string, string> = {
-            "Movie": "movie",
-            "TV Show": "series",
-          }
-          const omdbType = typeMap[formData.medium]
-          if (omdbType) {
-            url += `&type=${omdbType}`
-          }
-        }
-      } else if (isbn) {
-        // If ISBN is detected but medium not set, auto-set to Book
-        url += `&medium=Book`
-      }
-
-      if (formData.season) {
-        url += `&season=${encodeURIComponent(formData.season)}`
-      }
-
-      const response = await fetch(url)
-
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || "Failed to fetch metadata")
-      }
-
-      const metadata = await response.json()
+      const metadata = await fetchMetadata(source, {
+        title: formData.title || undefined,
+        imdb_id: formData.imdb_id || undefined,
+        medium: formData.medium || undefined,
+        season: formData.season || undefined
+      })
 
       // Check if there's existing data that would be overwritten
       const hasExistingData =
@@ -473,10 +78,11 @@ function AddPageContent() {
       if (hasExistingData) {
         // Show confirmation dialog with field selection
         setPendingMetadata(metadata)
-        // Initialize override fields based on what data exists and what's available in metadata
-        // Show field if metadata has it AND (form has it OR we want to allow adding new data)
+
+        // Initialize override fields
         const hasGenre = formData.genre && (Array.isArray(formData.genre) ? formData.genre.length > 0 : true)
         const hasLanguage = formData.language && (Array.isArray(formData.language) ? formData.language.length > 0 : true)
+
         setOverrideFields({
           title: !!metadata.title && !!formData.title,
           poster_url: !!metadata.poster_url && !!formData.poster_url,
@@ -488,8 +94,6 @@ function AddPageContent() {
           imdb_id: !!metadata.imdb_id && !!formData.imdb_id,
         })
         setShowOverrideDialog(true)
-        setFetchingMetadata(false)
-        setFetchingSource(null)
         return
       }
 
@@ -499,100 +103,7 @@ function AddPageContent() {
     } catch (error) {
       console.error("Error fetching metadata:", error)
       toast.error(error instanceof Error ? error.message : "Failed to fetch metadata")
-    } finally {
-      setFetchingMetadata(false)
-      setFetchingSource(null)
     }
-  }
-
-  const applyMetadata = (metadata: any, fieldsToOverride?: Record<string, boolean>) => {
-    // Handle genre as array or string (for backward compatibility)
-    const fetchedGenres = metadata.genre
-      ? (Array.isArray(metadata.genre)
-        ? metadata.genre.map((g: string) => g.trim()).filter(Boolean)
-        : metadata.genre.split(",").map((g: string) => g.trim()).filter(Boolean))
-      : []
-    const fetchedLanguages = metadata.language
-      ? (Array.isArray(metadata.language)
-        ? metadata.language.map((l: string) => l.trim()).filter(Boolean)
-        : metadata.language.split(",").map((l: string) => l.trim()).filter(Boolean))
-      : []
-
-    setFormData((prev) => {
-      // Handle genres - merge if not overriding, replace if overriding
-      let finalGenres: string[] = []
-      if (fieldsToOverride?.genre && fetchedGenres.length > 0) {
-        // Override: use fetched genres
-        finalGenres = fetchedGenres
-      } else if (fieldsToOverride?.genre === false) {
-        // Don't override: keep existing
-        finalGenres = prev.genre && Array.isArray(prev.genre) ? prev.genre : []
-      } else {
-        // Merge (default behavior when no override specified)
-        const existingGenres = prev.genre && Array.isArray(prev.genre) ? prev.genre : []
-        const mergedGenres = [...existingGenres]
-        fetchedGenres.forEach((g: string) => {
-          const normalized = g.toLowerCase()
-          if (!mergedGenres.some((eg: string) => eg.toLowerCase() === normalized)) {
-            mergedGenres.push(g)
-          }
-        })
-        finalGenres = mergedGenres
-      }
-
-      // Handle languages - merge if not overriding, replace if overriding
-      let finalLanguages: string[] = []
-      if (fieldsToOverride?.language && fetchedLanguages.length > 0) {
-        // Override: use fetched languages
-        finalLanguages = fetchedLanguages
-      } else if (fieldsToOverride?.language === false) {
-        // Don't override: keep existing
-        finalLanguages = prev.language && Array.isArray(prev.language) ? prev.language : []
-      } else {
-        // Merge (default behavior when no override specified)
-        const existingLanguages = prev.language && Array.isArray(prev.language) ? prev.language : []
-        const mergedLanguages = [...existingLanguages]
-        fetchedLanguages.forEach((l: string) => {
-          const normalized = l.toLowerCase()
-          if (!mergedLanguages.some((el: string) => el.toLowerCase() === normalized)) {
-            mergedLanguages.push(l)
-          }
-        })
-        finalLanguages = mergedLanguages
-      }
-
-      // Update input fields to reflect merged values
-      const genreText = finalGenres.length > 0 ? finalGenres.join(", ") : ""
-      const languageText = finalLanguages.length > 0 ? finalLanguages.join(", ") : ""
-      setGenreInput(genreText)
-      setLanguageInput(languageText)
-
-      return {
-        ...prev,
-        title: (fieldsToOverride?.title && metadata.title) ? metadata.title : prev.title,
-        poster_url: (fieldsToOverride?.poster_url && metadata.poster_url) ? metadata.poster_url : prev.poster_url,
-        genre: finalGenres.length > 0 ? finalGenres : null,
-        language: finalLanguages.length > 0 ? finalLanguages : null,
-        average_rating: (fieldsToOverride?.average_rating && metadata.average_rating !== null) ? metadata.average_rating : prev.average_rating,
-        length: (fieldsToOverride?.length && metadata.length) ? metadata.length : prev.length,
-        episodes: (fieldsToOverride?.episodes && metadata.episodes !== null) ? metadata.episodes : prev.episodes,
-        imdb_id: (fieldsToOverride?.imdb_id && metadata.imdb_id) ? metadata.imdb_id : prev.imdb_id,
-      }
-    })
-  }
-
-  const handleConfirmOverride = () => {
-    if (pendingMetadata) {
-      applyMetadata(pendingMetadata, overrideFields)
-      toast.success(`Metadata fetched successfully from ${fetchingSource?.toUpperCase() || "API"}`)
-    }
-    setShowOverrideDialog(false)
-    setPendingMetadata(null)
-  }
-
-  const handleCancelOverride = () => {
-    setShowOverrideDialog(false)
-    setPendingMetadata(null)
   }
 
   if (fetching) {
@@ -612,577 +123,61 @@ function AddPageContent() {
 
       {/* Form */}
       <main className="max-w-4xl mx-auto p-6">
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Title - Required */}
-          <div className="space-y-2">
-            <Label htmlFor="title" className="text-sm font-mono">
-              Title <span className="text-destructive">*</span>
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="title"
-                value={formData.title || ""}
-                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                placeholder="Enter title"
-                required
-                className="flex-1"
-              />
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleFetchMetadata("omdb")}
-                  disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
-                >
-                  {fetchingMetadata && fetchingSource === "omdb" ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Fetching...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      OMDB
-                    </>
-                  )}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleFetchMetadata("tmdb")}
-                  disabled={fetchingMetadata || (!formData.title?.trim() && !detectISBN(formData.imdb_id) && !detectIMDbID(formData.imdb_id))}
-                >
-                  {fetchingMetadata && fetchingSource === "tmdb" ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Fetching...
-                    </>
-                  ) : (
-                    <>
-                      <Download className="h-4 w-4 mr-2" />
-                      TMDB
-                    </>
-                  )}
-                </Button>
-              </div>
-            </div>
-          </div>
+        <form onSubmit={(e) => handleSubmit(e, returnTo)} className="space-y-6">
+          <BasicDetailsSection
+            title={formData.title || null}
+            onChange={(val) => setFormData({ ...formData, title: val })}
+            onFetchMetadata={handleFetchMetadata}
+            fetchingMetadata={fetchingMetadata}
+            fetchingSource={fetchingSource}
+            imdbId={formData.imdb_id || null}
+            detectISBN={detectISBN}
+            detectIMDbID={detectIMDbID}
+          />
 
-          {/* Medium and Status */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="medium" className="text-sm font-mono">
-                Medium
-              </Label>
-              {showNewInput.medium ? (
-                <div className="flex gap-2">
-                  <Input
-                    id="medium"
-                    value={newValue.medium}
-                    onChange={(e) => setNewValue({ ...newValue, medium: e.target.value })}
-                    placeholder="Enter new medium"
-                    onBlur={() => {
-                      if (newValue.medium.trim()) {
-                        const trimmedValue = newValue.medium.trim()
-                        setFormData({ ...formData, medium: trimmedValue })
-                        setDropdownOptions(prev => ({
-                          ...prev,
-                          mediums: prev.mediums.includes(trimmedValue) ? prev.mediums : [...prev.mediums, trimmedValue]
-                        }))
-                        setShowNewInput({ ...showNewInput, medium: false })
-                        setNewValue({ ...newValue, medium: "" })
-                      } else {
-                        setShowNewInput({ ...showNewInput, medium: false })
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.currentTarget.blur()
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-              ) : (
-                <Select
-                  value={formData.medium || "__none__"}
-                  onValueChange={(value) => {
-                    if (value === "__new__") {
-                      setShowNewInput({ ...showNewInput, medium: true })
-                    } else {
-                      setFormData({ ...formData, medium: value === "__none__" ? null : value })
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select medium" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {dropdownOptions.mediums.map((medium) => (
-                      <SelectItem key={medium} value={medium}>
-                        {medium}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="__new__">+ New</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+          <ClassificationSection
+            formData={formData as any}
+            setFormData={setFormData as any}
+            dropdownOptions={dropdownOptions}
+            setDropdownOptions={setDropdownOptions as any}
+            showNewInput={showNewInput}
+            setShowNewInput={setShowNewInput as any}
+            newValue={newValue}
+            setNewValue={setNewValue as any}
+            genreInput={genreInput}
+            handleGenreChange={handleGenreChange}
+            languageInput={languageInput}
+            handleLanguageChange={handleLanguageChange}
+          />
 
-            <div className="space-y-2">
-              <Label htmlFor="status" className="text-sm font-mono">
-                Status
-              </Label>
-              {showNewInput.status ? (
-                <div className="flex gap-2">
-                  <Input
-                    id="status"
-                    value={newValue.status}
-                    onChange={(e) => setNewValue({ ...newValue, status: e.target.value })}
-                    placeholder="Enter new status"
-                    onBlur={() => {
-                      if (newValue.status.trim()) {
-                        const trimmedValue = newValue.status.trim()
-                        setFormData({ ...formData, status: trimmedValue })
-                        setDropdownOptions(prev => ({
-                          ...prev,
-                          statuses: prev.statuses.includes(trimmedValue) ? prev.statuses : [...prev.statuses, trimmedValue]
-                        }))
-                        setShowNewInput({ ...showNewInput, status: false })
-                        setNewValue({ ...newValue, status: "" })
-                      } else {
-                        setShowNewInput({ ...showNewInput, status: false })
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.currentTarget.blur()
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-              ) : (
-                <Select
-                  value={formData.status || "__none__"}
-                  onValueChange={(value) => {
-                    if (value === "__new__") {
-                      setShowNewInput({ ...showNewInput, status: true })
-                    } else {
-                      setFormData({ ...formData, status: value === "__none__" ? null : value })
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {dropdownOptions.statuses.map((status) => (
-                      <SelectItem key={status} value={status}>
-                        {status}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="__new__">+ New</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-          </div>
+          <MediaDetailsSection
+            formData={formData as any}
+            setFormData={setFormData as any}
+            dropdownOptions={dropdownOptions}
+            setDropdownOptions={setDropdownOptions as any}
+            showNewInput={showNewInput}
+            setShowNewInput={setShowNewInput as any}
+            newValue={newValue}
+            setNewValue={setNewValue as any}
+            detectISBN={detectISBN}
+          />
 
-          {/* Type, Season, Language */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="type" className="text-sm font-mono">
-                Type
-              </Label>
-              {showNewInput.type ? (
-                <div className="flex gap-2">
-                  <Input
-                    id="type"
-                    value={newValue.type}
-                    onChange={(e) => setNewValue({ ...newValue, type: e.target.value })}
-                    placeholder="Enter new type"
-                    onBlur={() => {
-                      if (newValue.type.trim()) {
-                        const trimmedValue = newValue.type.trim()
-                        setFormData({ ...formData, type: trimmedValue })
-                        setDropdownOptions(prev => ({
-                          ...prev,
-                          types: prev.types.includes(trimmedValue) ? prev.types : [...prev.types, trimmedValue]
-                        }))
-                        setShowNewInput({ ...showNewInput, type: false })
-                        setNewValue({ ...newValue, type: "" })
-                      } else {
-                        setShowNewInput({ ...showNewInput, type: false })
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.currentTarget.blur()
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-              ) : (
-                <Select
-                  value={formData.type || "__none__"}
-                  onValueChange={(value) => {
-                    if (value === "__new__") {
-                      setShowNewInput({ ...showNewInput, type: true })
-                    } else {
-                      setFormData({ ...formData, type: value === "__none__" ? null : value })
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {dropdownOptions.types.map((type) => (
-                      <SelectItem key={type} value={type}>
-                        {type}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="__new__">+ New</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
+          <RatingSection
+            formData={formData as any}
+            setFormData={setFormData as any}
+          />
 
-            <div className="space-y-2">
-              <Label htmlFor="season" className="text-sm font-mono">
-                Season
-              </Label>
-              <Input
-                id="season"
-                value={formData.season || ""}
-                onChange={(e) => setFormData({ ...formData, season: e.target.value })}
-                placeholder="e.g., Season 1"
-              />
-            </div>
+          <DatesSection
+            formData={formData as any}
+            setFormData={setFormData as any}
+          />
 
-            <div className="space-y-2">
-              <Label htmlFor="language" className="text-sm font-mono">
-                Language (comma-separated)
-              </Label>
-              <Input
-                id="language"
-                value={languageInput}
-                onChange={(e) => handleLanguageChange(e.target.value)}
-                placeholder="e.g., English, French, Spanish"
-              />
-            </div>
-          </div>
-
-          {/* Genre */}
-          <div className="space-y-2">
-            <Label htmlFor="genre" className="text-sm font-mono">
-              Genre (comma-separated)
-            </Label>
-            <Input
-              id="genre"
-              value={genreInput}
-              onChange={(e) => handleGenreChange(e.target.value)}
-              placeholder="e.g., Action, Drama, Comedy"
-            />
-          </div>
-
-          {/* Platform, Episodes, Length */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="platform" className="text-sm font-mono">
-                Platform
-              </Label>
-              {showNewInput.platform ? (
-                <div className="flex gap-2">
-                  <Input
-                    id="platform"
-                    value={newValue.platform}
-                    onChange={(e) => setNewValue({ ...newValue, platform: e.target.value })}
-                    placeholder="Enter new platform"
-                    onBlur={() => {
-                      if (newValue.platform.trim()) {
-                        const trimmedValue = newValue.platform.trim()
-                        setFormData({ ...formData, platform: trimmedValue })
-                        setDropdownOptions(prev => ({
-                          ...prev,
-                          platforms: prev.platforms.includes(trimmedValue) ? prev.platforms : [...prev.platforms, trimmedValue]
-                        }))
-                        setShowNewInput({ ...showNewInput, platform: false })
-                        setNewValue({ ...newValue, platform: "" })
-                      } else {
-                        setShowNewInput({ ...showNewInput, platform: false })
-                      }
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.currentTarget.blur()
-                      }
-                    }}
-                    autoFocus
-                  />
-                </div>
-              ) : (
-                <Select
-                  value={formData.platform || "__none__"}
-                  onValueChange={(value) => {
-                    if (value === "__new__") {
-                      setShowNewInput({ ...showNewInput, platform: true })
-                    } else {
-                      setFormData({ ...formData, platform: value === "__none__" ? null : value })
-                    }
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select platform" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">None</SelectItem>
-                    {dropdownOptions.platforms.map((platform) => (
-                      <SelectItem key={platform} value={platform}>
-                        {platform}
-                      </SelectItem>
-                    ))}
-                    <SelectItem value="__new__">+ New</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="episodes" className="text-sm font-mono">
-                Episodes
-              </Label>
-              <Input
-                id="episodes"
-                type="number"
-                value={formData.episodes || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    episodes: e.target.value ? parseInt(e.target.value) : null,
-                  })
-                }
-                placeholder="Number of episodes"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="length" className="text-sm font-mono">
-                Length
-              </Label>
-              <Input
-                id="length"
-                value={formData.length || ""}
-                onChange={(e) => setFormData({ ...formData, length: e.target.value })}
-                placeholder="e.g., 120 min, 300 pages"
-              />
-            </div>
-          </div>
-
-          {/* Ratings */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="my_rating" className="text-sm font-mono">
-                My Rating
-              </Label>
-              <Input
-                id="my_rating"
-                type="number"
-                step="0.1"
-                min="0"
-                max="10"
-                value={formData.my_rating || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    my_rating: e.target.value ? parseFloat(e.target.value) : null,
-                  })
-                }
-                placeholder="0-10"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="average_rating" className="text-sm font-mono">
-                Average Rating
-              </Label>
-              <Input
-                id="average_rating"
-                type="number"
-                step="0.1"
-                min="0"
-                max="10"
-                value={formData.average_rating || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    average_rating: e.target.value ? parseFloat(e.target.value) : null,
-                  })
-                }
-                placeholder="e.g., IMDb rating"
-              />
-            </div>
-          </div>
-
-          {/* Dates */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="start_date" className="text-sm font-mono">
-                Start Date
-              </Label>
-              <Input
-                id="start_date"
-                type="date"
-                value={formData.start_date || ""}
-                onChange={(e) => setFormData({ ...formData, start_date: e.target.value || null })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="finish_date" className="text-sm font-mono">
-                Finish Date
-              </Label>
-              <Input
-                id="finish_date"
-                type="date"
-                value={formData.finish_date || ""}
-                onChange={(e) => setFormData({ ...formData, finish_date: e.target.value || null })}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="time_taken" className="text-sm font-mono">
-                Time Taken (Auto-calculated)
-              </Label>
-              <Input
-                id="time_taken"
-                value={formData.time_taken || ""}
-                readOnly
-                placeholder="Auto-calculated from dates"
-                className="bg-muted cursor-not-allowed"
-              />
-            </div>
-          </div>
-
-          {/* Price and IDs */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label htmlFor="price" className="text-sm font-mono">
-                Price
-              </Label>
-              <Input
-                id="price"
-                type="number"
-                step="0.01"
-                min="0"
-                value={formData.price || ""}
-                onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    price: e.target.value ? parseFloat(e.target.value) : null,
-                  })
-                }
-                placeholder="0.00"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="imdb_id" className="text-sm font-mono">
-                IMDb ID / ISBN
-              </Label>
-              <Input
-                id="imdb_id"
-                value={formData.imdb_id || ""}
-                onChange={(e) => {
-                  const value = e.target.value
-                  const isbn = detectISBN(value)
-
-                  // Auto-set medium to "Book" if ISBN is detected
-                  if (isbn) {
-                    setFormData({ ...formData, imdb_id: value, medium: "Book" })
-                  } else {
-                    setFormData({ ...formData, imdb_id: value })
-                  }
-                }}
-                placeholder="tt1234567 or 9780123456789"
-              />
-            </div>
-          </div>
-
-          {/* Poster URL */}
-          <div className="space-y-2">
-            <Label htmlFor="poster_url" className="text-sm font-mono">
-              Poster URL
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                id="poster_url"
-                type="url"
-                value={formData.poster_url || ""}
-                onChange={(e) => setFormData({ ...formData, poster_url: e.target.value })}
-                placeholder="https://..."
-                className="flex-1"
-              />
-              <input
-                type="file"
-                id="image-upload"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageUpload}
-                disabled={uploadingImage}
-              />
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => document.getElementById('image-upload')?.click()}
-                disabled={uploadingImage}
-                className="gap-2"
-              >
-                {uploadingImage ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Uploading...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="h-4 w-4" />
-                    Upload
-                  </>
-                )}
-              </Button>
-            </div>
-            {formData.poster_url && (
-              <div className="relative w-full h-48 border rounded-md overflow-hidden bg-muted">
-                <SafeImage
-                  src={formData.poster_url}
-                  alt="Poster preview"
-                  fill
-                  className="object-contain"
-                  fallbackElement={
-                    <div className="flex items-center justify-center h-full text-muted-foreground">
-                      Invalid image URL
-                    </div>
-                  }
-                />
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="icon"
-                  className="absolute top-2 right-2 h-8 w-8"
-                  onClick={() => setFormData({ ...formData, poster_url: null })}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              </div>
-            )}
-          </div>
+          <PosterSection
+            formData={formData as any}
+            setFormData={setFormData as any}
+            handleImageUpload={handleImageUpload}
+            uploadingImage={uploadingImage}
+          />
 
           {/* Submit Buttons */}
           <div className="flex items-center gap-3 pt-4">
@@ -1213,7 +208,7 @@ function AddPageContent() {
             <Button
               type="button"
               variant="ghost"
-              onClick={() => router.push("/analytics")}
+              onClick={() => router.push("/movies/analytics")}
               disabled={loading}
             >
               Cancel
@@ -1222,238 +217,16 @@ function AddPageContent() {
         </form>
       </main>
 
-      {/* Override Confirmation Dialog */}
-      <Dialog open={showOverrideDialog} onOpenChange={setShowOverrideDialog}>
-        <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
-          <DialogHeader className="flex-shrink-0">
-            <DialogTitle>Select Fields to Override</DialogTitle>
-            <DialogDescription>
-              Choose which metadata fields you want to override with the fetched data.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-4 space-y-2 flex-1 overflow-y-auto min-h-0">
-            {pendingMetadata && (
-              <div className="space-y-2">
-                {pendingMetadata.title && formData.title && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-title"
-                      checked={overrideFields.title}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, title: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-title" className="text-sm font-medium cursor-pointer block mb-1">
-                        Title
-                      </label>
-                      <div className="text-xs text-muted-foreground break-words">
-                        {pendingMetadata.title}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {pendingMetadata.poster_url && formData.poster_url && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-poster"
-                      checked={overrideFields.poster_url}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, poster_url: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-poster" className="text-sm font-medium cursor-pointer block mb-1">
-                        Poster URL
-                      </label>
-                      <div className="text-xs text-muted-foreground break-all">
-                        {pendingMetadata.poster_url}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {pendingMetadata.genre && formData.genre && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-genre"
-                      checked={overrideFields.genre}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, genre: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-genre" className="text-sm font-medium cursor-pointer block mb-1">
-                        Genre
-                      </label>
-                      <div className="text-xs text-muted-foreground break-words">
-                        {Array.isArray(pendingMetadata.genre)
-                          ? pendingMetadata.genre.join(", ")
-                          : pendingMetadata.genre}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {pendingMetadata.language && formData.language && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-language"
-                      checked={overrideFields.language}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, language: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-language" className="text-sm font-medium cursor-pointer block mb-1">
-                        Language
-                      </label>
-                      <div className="text-xs text-muted-foreground break-words">
-                        {Array.isArray(pendingMetadata.language)
-                          ? pendingMetadata.language.join(", ")
-                          : pendingMetadata.language}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {pendingMetadata.average_rating !== null && formData.average_rating !== null && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-rating"
-                      checked={overrideFields.average_rating}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, average_rating: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-rating" className="text-sm font-medium cursor-pointer block mb-1">
-                        Average Rating
-                      </label>
-                      <div className="text-xs text-muted-foreground">
-                        {pendingMetadata.average_rating}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {pendingMetadata.length && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-length"
-                      checked={overrideFields.length}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, length: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-length" className="text-sm font-medium cursor-pointer block mb-1">
-                        Length
-                      </label>
-                      <div className="text-xs text-muted-foreground break-words">
-                        {pendingMetadata.length}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {pendingMetadata.episodes !== null && formData.episodes !== null && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-episodes"
-                      checked={overrideFields.episodes}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, episodes: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-episodes" className="text-sm font-medium cursor-pointer block mb-1">
-                        Episodes
-                      </label>
-                      <div className="text-xs text-muted-foreground">
-                        {pendingMetadata.episodes}
-                      </div>
-                    </div>
-                  </div>
-                )}
-                {pendingMetadata.imdb_id && formData.imdb_id && (
-                  <div className="flex items-start gap-3 p-2 rounded-md hover:bg-accent/50 transition-colors">
-                    <input
-                      type="checkbox"
-                      id="override-imdb"
-                      checked={overrideFields.imdb_id}
-                      onChange={(e) => setOverrideFields({ ...overrideFields, imdb_id: e.target.checked })}
-                      className="h-4 w-4 mt-0.5 rounded border-gray-300 flex-shrink-0"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <label htmlFor="override-imdb" className="text-sm font-medium cursor-pointer block mb-1">
-                        IMDb ID
-                      </label>
-                      <div className="text-xs text-muted-foreground break-all">
-                        {pendingMetadata.imdb_id}
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          <DialogFooter className="flex-col sm:flex-row gap-2 flex-shrink-0 border-t pt-4 mt-4">
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Select all
-                  setOverrideFields({
-                    title: true,
-                    poster_url: true,
-                    genre: true,
-                    language: true,
-                    average_rating: true,
-                    length: true,
-                    episodes: true,
-                    imdb_id: true,
-                  })
-                }}
-                className="flex-1 sm:flex-initial"
-              >
-                Select All
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  // Deselect all
-                  setOverrideFields({
-                    title: false,
-                    poster_url: false,
-                    genre: false,
-                    language: false,
-                    average_rating: false,
-                    length: false,
-                    episodes: false,
-                    imdb_id: false,
-                  })
-                }}
-                className="flex-1 sm:flex-initial"
-              >
-                Deselect All
-              </Button>
-            </div>
-            <div className="flex gap-2 w-full sm:w-auto">
-              <Button type="button" variant="outline" onClick={handleCancelOverride} className="flex-1 sm:flex-initial">
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                onClick={handleConfirmOverride}
-                disabled={!Object.values(overrideFields).some(v => v)}
-                className="flex-1 sm:flex-initial"
-              >
-                Apply Selected
-              </Button>
-            </div>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <MetadataOverrideDialog
+        open={showOverrideDialog}
+        onOpenChange={setShowOverrideDialog}
+        pendingMetadata={pendingMetadata}
+        currentData={formData}
+        overrideFields={overrideFields}
+        onOverrideFieldsChange={setOverrideFields}
+        onConfirm={() => handleConfirmOverride(fetchingSource === "omdb" ? "OMDB" : "TMDB")}
+        onCancel={handleCancelOverride}
+      />
     </div>
   )
 }

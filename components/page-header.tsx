@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import dynamic from "next/dynamic"
 import Link from "next/link"
 import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -14,10 +15,24 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { BookDetailsDialog } from "@/components/book-details-dialog"
-import { MusicDetailsDialog } from "@/components/music-details-dialog"
-import { MediaDetailsDialog } from "@/components/media-details-dialog"
-import { FoodAddDialog } from "@/components/food-add-dialog"
+
+// Dynamic imports for dialog components - reduces initial bundle size
+const BookDetailsDialog = dynamic(
+  () => import("@/components/book-details-dialog").then(m => m.BookDetailsDialog),
+  { ssr: false }
+)
+const MusicDetailsDialog = dynamic(
+  () => import("@/components/music-details-dialog").then(m => m.MusicDetailsDialog),
+  { ssr: false }
+)
+const MediaDetailsDialog = dynamic(
+  () => import("@/components/media-details-dialog").then(m => m.MediaDetailsDialog),
+  { ssr: false }
+)
+const FoodAddDialog = dynamic(
+  () => import("@/components/food-add-dialog").then(m => m.FoodAddDialog),
+  { ssr: false }
+)
 
 const WORKSPACES = {
   movies: { label: "Movies & TV", icon: Film, path: "/movies" },
