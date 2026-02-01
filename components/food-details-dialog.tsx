@@ -366,12 +366,20 @@ export function FoodDetailsDialog({
                                                                     {item.name}
                                                                     {item.name === entry.favorite_item && " ⭐"}
                                                                 </span>
-                                                                {item.price && (
-                                                                    <span className="text-sm font-mono text-muted-foreground flex-shrink-0">
-                                                                        {formatDualCurrency(item.price)}
-                                                                    </span>
-                                                                )}
+                                                                <span className="text-sm font-mono text-muted-foreground whitespace-nowrap">
+                                                                    {formatDualCurrency(item.price)}
+                                                                </span>
                                                             </div>
+                                                            {/* Item Categories */}
+                                                            {(item.categories?.length || item.category) && (
+                                                                <div className="flex flex-wrap gap-1 mt-1">
+                                                                    {(item.categories || [item.category]).filter(Boolean).map((cat, idx) => (
+                                                                        <Badge key={idx} variant="outline" className="text-[10px] px-1 h-4">
+                                                                            {cat}
+                                                                        </Badge>
+                                                                    ))}
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </li>
                                                 ))}

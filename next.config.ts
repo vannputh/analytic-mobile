@@ -6,6 +6,9 @@ const nextConfig: NextConfig = {
 
   // Optimize package imports for better tree-shaking
   experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
     optimizePackageImports: [
       'lucide-react',
       'recharts',

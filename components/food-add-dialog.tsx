@@ -261,8 +261,9 @@ export function FoodAddDialog({
             const itemsForDb: ItemOrdered[] = itemsOrdered.map(item => ({
                 name: item.name,
                 price: item.price,
-                image_url: item.image_url || item.preview || null,
-                category: item.category || null
+                image_url: item.image_url || (item.preview?.startsWith('data:') ? null : item.preview) || null,
+                category: item.category || item.categories?.[0] || null,
+                categories: item.categories || (item.category ? [item.category] : null)
             }))
 
             const data: FoodEntryInsert | FoodEntryUpdate = {
@@ -345,7 +346,8 @@ export function FoodAddDialog({
                             name: item.name,
                             price: item.price,
                             image_url: item.image_url || null,
-                            category: item.category || null
+                            category: item.category || item.categories?.[0] || null,
+                            categories: item.categories || (item.category ? [item.category] : null)
                         }))
 
                         await updateFoodEntry(entryId, { items_ordered: itemsForDb })

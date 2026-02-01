@@ -653,7 +653,14 @@ export async function getUniqueCuisineTypes(): Promise<ActionResponse<string[]>>
 // Get unique item categories from items_ordered array
 export async function getUniqueItemCategories(): Promise<ActionResponse<string[]>> {
     return getUniqueValues('items_ordered', (data) =>
-        data.flatMap((e: any) => e.items_ordered || []).map((item: any) => item.category).filter(Boolean)
+        data.flatMap((e: any) => e.items_ordered || [])
+            .flatMap((item: any) => {
+                const cats = []
+                if (item.categories && Array.isArray(item.categories)) cats.push(...item.categories)
+                if (item.category) cats.push(item.category)
+                return cats
+            })
+            .filter(Boolean)
     )
 }
 

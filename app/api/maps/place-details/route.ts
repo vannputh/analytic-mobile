@@ -18,74 +18,129 @@ export async function POST(request: NextRequest) {
 
         // 1. Expand short URLs if necessary
         let fullUrl = url;
-        if (url.includes("goo.gl") || url.includes("maps.app.goo.gl")) {
+        let redirectCount = 0;
+        const maxRedirects = 5;
+
+        while ((fullUrl.includes("goo.gl") || fullUrl.includes("maps.app.goo.gl")) && redirectCount < maxRedirects) {
             try {
-                const response = await fetch(url, {
+                const response = await fetch(fullUrl, {
                     method: "HEAD",
                     redirect: "manual",
                 });
                 const location = response.headers.get("location");
                 if (location) {
-                    fullUrl = location;
+                    fullUrl = location.startsWith('http') ? location : new URL(location, fullUrl).href;
+                    redirectCount++;
+                } else {
+                    break;
                 }
             } catch (error) {
                 console.error("Error expanding short URL:", error);
-                // Continue with original URL if expansion fails, though it likely won't work well
+                break;
             }
         }
 
         // 2. Extract info from URL
-        // Patterns:
-        // https://www.google.com/maps/place/Place+Name/@lat,lng,...
-        // https://www.google.com/maps/place/data=!3m1!4b1!4m2!3m1!1s0x0:0x... (CID) - hard to use CID with Places API new version
-        // https://www.google.com/maps/search/?api=1&query=...&query_place_id=...
-
         let placeId: string | null = null;
         let query: string | null = null;
-        let searchUrl = "";
+        let coords: { lat: number; lng: number } | null = null;
+        let searchStrategy: "id" | "query" = "query";
 
-        // Try to find place_id in URL query params (some share links have it)
         try {
             const urlObj = new URL(fullUrl);
-            // Check for ?q=... or ?query=...
-            const qParam = urlObj.searchParams.get("q") || urlObj.searchParams.get("query");
-            if (qParam) query = qParam;
 
-            // Check for place_id or ftid (sometimes used)
+            // Check for place_id or ftid
             const idParam = urlObj.searchParams.get("place_id") || urlObj.searchParams.get("ftid");
-            if (idParam) placeId = idParam;
-        } catch (e) {
-            // invalid url, ignore
-        }
+            if (idParam) {
+                placeId = idParam;
+                searchStrategy = "id";
+            }
 
-        // regex for /maps/place/Name/ or /maps/search/Name/
-        if (!placeId && !query) {
-            const placeRegex = /\/maps\/place\/([^\/]+)/;
-            const match = fullUrl.match(placeRegex);
-            if (match && match[1]) {
-                // Check if it looks like a coordinate or generic placeholder
-                const captured = match[1];
-                if (!captured.startsWith("@")) {
-                    // Decode the name, replace + with space
+            // Extract coordinates from URL if present (e.g., @11.5834349,104.8813013)
+            const coordMatch = fullUrl.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
+            if (coordMatch) {
+                coords = {
+                    lat: parseFloat(coordMatch[1]),
+                    lng: parseFloat(coordMatch[2])
+                };
+            }
+
+            // If no Place ID, look for query in path
+            if (!placeId) {
+                // regex for /maps/place/Name/ or /maps/search/Name/
+                // Catch both "place" and "search" paths, avoid capturing coordinates
+                const placeRegex = /\/maps\/(?:place|search)\/([^\/@?]+)/;
+                const match = fullUrl.match(placeRegex);
+
+                if (match && match[1]) {
+                    const captured = match[1];
                     query = decodeURIComponent(captured).replace(/\+/g, " ");
+                    searchStrategy = "query";
                 }
             }
+
+            // Fallback to q/query param if no path match
+            if (!placeId && !query && searchStrategy !== "id") {
+                const qParam = urlObj.searchParams.get("q") || urlObj.searchParams.get("query");
+                if (qParam) {
+                    query = qParam;
+                    searchStrategy = "query";
+                }
+            }
+
+        } catch (e) {
+            console.error("URL parsing error:", e);
+        }
+
+        if (!placeId && !query && !coords) {
+            return NextResponse.json({ error: "Could not identify place from URL" }, { status: 404 });
         }
 
         // 3. Call Google Places API
-        // If we have a Place ID, use Details. If we have a query, use Find Place or Text Search.
-
-        // We prefer Text Search (New) or Find Place because scraping the URL for Place ID is unreliable unless it's explicitly there.
-        // The "Name" in the URL is usually good enough for a Text Search.
-
         let placeData = null;
 
-        if (query) {
-            // Use Text Search (Basic) to find the place
-            // https://places.googleapis.com/v1/places:searchText
-            // FieldMask: places.id,places.displayName,places.formattedAddress,places.priceLevel,places.rating,places.websiteUri,places.location
+        if (searchStrategy === "id" && placeId) {
+            const placeDetailsUrl = `https://places.googleapis.com/v1/places/${placeId}`;
 
+            const response = await fetch(placeDetailsUrl, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Goog-Api-Key': apiKey,
+                    'X-Goog-FieldMask': 'id,displayName,formattedAddress,priceLevel,rating,websiteUri,location,addressComponents,photos'
+                }
+            });
+
+            if (response.ok) {
+                placeData = await response.json();
+            }
+        }
+
+        if (!placeData && (query || coords)) {
             const textSearchUrl = `https://places.googleapis.com/v1/places:searchText`;
+
+            const searchBody: any = {
+                maxResultCount: 1
+            };
+
+            if (query) {
+                searchBody.textQuery = query;
+            } else if (coords) {
+                searchBody.textQuery = "restaurant"; // Fallback if we only have coords
+            }
+
+            // Critical: Add location bias if we have coordinates from the URL
+            if (coords) {
+                searchBody.locationBias = {
+                    circle: {
+                        center: {
+                            latitude: coords.lat,
+                            longitude: coords.lng
+                        },
+                        radius: 500.0 // 500 meters radius
+                    }
+                };
+            }
 
             const response = await fetch(textSearchUrl, {
                 method: 'POST',
@@ -94,10 +149,7 @@ export async function POST(request: NextRequest) {
                     'X-Goog-Api-Key': apiKey,
                     'X-Goog-FieldMask': 'places.id,places.displayName,places.formattedAddress,places.priceLevel,places.rating,places.websiteUri,places.location,places.addressComponents,places.photos'
                 },
-                body: JSON.stringify({
-                    textQuery: query,
-                    maxResultCount: 1
-                })
+                body: JSON.stringify(searchBody)
             });
 
             const data = await response.json();
@@ -107,9 +159,7 @@ export async function POST(request: NextRequest) {
         }
 
         if (!placeData) {
-            // Fallback: If we couldn't extract a query, or search returned nothing, 
-            // maybe clean the URL ? 
-            return NextResponse.json({ error: "Could not identify place from URL" }, { status: 404 });
+            return NextResponse.json({ error: "Could not identify place from URL or search returned no results" }, { status: 404 });
         }
 
         // 4. Transform response

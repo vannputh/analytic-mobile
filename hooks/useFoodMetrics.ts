@@ -140,8 +140,12 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
                 // Spending by item category
                 if (entry.items_ordered && Array.isArray(entry.items_ordered)) {
                     for (const item of entry.items_ordered) {
-                        if (item.category && item.price) {
-                            incrementRecord(spentByItemCategory, item.category, item.price)
+                        const categories = item.categories?.length ? item.categories : (item.category ? [item.category] : [])
+                        if (categories.length > 0 && item.price) {
+                            const perCategoryPrice = item.price / categories.length
+                            for (const cat of categories) {
+                                incrementRecord(spentByItemCategory, cat, perCategoryPrice)
+                            }
                         }
                     }
                 }
@@ -174,8 +178,9 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
             // Item categories (from items_ordered)
             if (entry.items_ordered && Array.isArray(entry.items_ordered)) {
                 for (const item of entry.items_ordered) {
-                    if (item.category) {
-                        incrementRecord(countByItemCategory, item.category)
+                    const categories = item.categories?.length ? item.categories : (item.category ? [item.category] : [])
+                    for (const cat of categories) {
+                        incrementRecord(countByItemCategory, cat)
                     }
                 }
             }

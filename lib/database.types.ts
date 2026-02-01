@@ -385,6 +385,7 @@ export type ItemOrdered = {
   price: number | null
   image_url: string | null
   category: string | null
+  categories?: string[] | null
 }
 
 // Food entry type
