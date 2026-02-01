@@ -68,6 +68,15 @@ export const FOOD_TAGS = [
 ] as const
 export type FoodTag = (typeof FOOD_TAGS)[number]
 
+// Dining type: how the meal was consumed (takeaway, eat in, delivery)
+export const DINING_OPTIONS = [
+    { value: 'takeaway', label: 'Takeaway' },
+    { value: 'eat_in', label: 'Dine in' },
+    { value: 'delivery', label: 'Delivery' },
+] as const
+export type DiningTypeValue = (typeof DINING_OPTIONS)[number]['value']
+export const DINING_TYPE_VALUES: DiningTypeValue[] = DINING_OPTIONS.map((o) => o.value)
+
 // Currency options - USD is default
 export const CURRENCIES = ['USD', 'KHR', 'THB', 'EUR', 'JPY', 'GBP', 'SGD', 'KRW'] as const
 export type Currency = (typeof CURRENCIES)[number]
@@ -87,6 +96,12 @@ export function formatDualCurrency(usdAmount: number | null | undefined): string
     return `$${usdAmount.toFixed(2)} (${khrFormatted})`
 }
 
+// Display "Restaurant Name - Branch Name" or just "Restaurant Name" when no branch
+export function formatRestaurantDisplayName(entry: { name: string; branch?: string | null }): string {
+    const branch = entry.branch?.trim()
+    return branch ? `${entry.name} - ${branch}` : entry.name
+}
+
 // Filter state for food entries
 export interface FoodFilterState {
     dateFrom: string | null
@@ -95,6 +110,7 @@ export interface FoodFilterState {
     cuisineTypes: string[]
     itemCategories: string[]
     priceLevels: string[]
+    diningTypes: string[]
     cities: string[]
     minRating: number | null
     wouldReturn: boolean | null
@@ -107,6 +123,7 @@ export const defaultFoodFilterState: FoodFilterState = {
     cuisineTypes: [],
     itemCategories: [],
     priceLevels: [],
+    diningTypes: [],
     cities: [],
     minRating: null,
     wouldReturn: null,

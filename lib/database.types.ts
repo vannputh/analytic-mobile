@@ -392,6 +392,7 @@ export type ItemOrdered = {
 export type FoodEntry = {
   id: string
   name: string
+  branch: string | null
   visit_date: string
   category: string | null
   address: string | null
@@ -416,6 +417,7 @@ export type FoodEntry = {
   currency: string | null
   price_level: string | null
   cuisine_type: string[] | null
+  dining_type: string | null
   tags: string[] | null
   would_return: boolean | null
   notes: string | null

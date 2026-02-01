@@ -34,6 +34,7 @@ export default async function FoodAnalyticsPage() {
                     cuisineTypes={cuisinesResult.success ? cuisinesResult.data : []}
                     itemCategories={itemCategoriesResult.success ? itemCategoriesResult.data : []}
                     categories={categoriesResult.success ? categoriesResult.data : []}
+                    cities={citiesResult.success ? citiesResult.data : []}
                 />
             </div>
         )

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from "react"
 import Image from "next/image"
-import { Star, X, Plus, Upload, Camera, Check, ChevronsUpDown, Edit2, Loader2, ClipboardPaste, Copy } from "lucide-react"
+import { Star, X, Plus, Upload, Camera, Check, ChevronsUpDown, Edit2, Loader2, Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -26,7 +26,6 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from "@/components/ui/popover"
-import { Textarea } from "@/components/ui/textarea"
 
 interface ItemWithPreview extends ItemOrdered {
     file?: File
@@ -189,45 +188,6 @@ export function ItemsOrderedInput({
         }
     }
 
-    // Parse bulk paste: one item per line; optional price at end (e.g. "Dish – 5.00" or "Dish 5" or "Dish")
-    const parseBulkLines = (text: string): { name: string; price: number | null }[] => {
-        return text
-            .split(/\r?\n/)
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .map((line) => {
-                const priceMatch = line.match(/\s*[–\-$]\s*(\d+(?:\.\d{1,2})?)\s*$|\s+(\d+(?:\.\d{1,2})?)\s*$/)
-                if (priceMatch) {
-                    const price = parseFloat(priceMatch[1] ?? priceMatch[2] ?? "0")
-                    const name = line.replace(/\s*[–\-$]\s*\d+(?:\.\d{1,2})?\s*$|\s+\d+(?:\.\d{1,2})?\s*$/, "").trim()
-                    return { name: name || line, price }
-                }
-                return { name: line, price: null }
-            })
-    }
-
-    const [bulkPasteText, setBulkPasteText] = useState("")
-    const [showBulkPaste, setShowBulkPaste] = useState(false)
-
-    const addFromBulkPaste = () => {
-        const parsed = parseBulkLines(bulkPasteText)
-        if (parsed.length === 0) {
-            toast.error("No valid lines to add. Use one item per line, e.g. \"Dish name – 5.00\"")
-            return
-        }
-        const newItems: ItemWithPreview[] = parsed.map(({ name, price }) => ({
-            name,
-            price,
-            image_url: null,
-            categories: null,
-            category: null,
-        }))
-        onChange([...value, ...newItems])
-        setBulkPasteText("")
-        setShowBulkPaste(false)
-        toast.success(`Added ${parsed.length} item${parsed.length === 1 ? "" : "s"}`)
-    }
-
     const removeItem = (index: number) => {
         const item = value[index]
         if (favoriteItem === item.name) {
@@ -353,74 +313,6 @@ export function ItemsOrderedInput({
     return (
         <div className="space-y-4">
             <Label className="text-sm">Items Ordered</Label>
-
-            {/* Bulk paste */}
-            <div className="space-y-2">
-                {!showBulkPaste ? (
-                    <div className="flex flex-wrap gap-2">
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground h-8"
-                            onClick={() => setShowBulkPaste(true)}
-                        >
-                            <ClipboardPaste className="h-3.5 w-3.5 mr-2" />
-                            Paste items (one per line)
-                        </Button>
-                        <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-muted-foreground h-8"
-                            onClick={async () => {
-                                try {
-                                    const text = await navigator.clipboard.readText()
-                                    const parsed = parseBulkLines(text)
-                                    if (parsed.length === 0) {
-                                        toast.error("No valid lines to add. Use one item per line, e.g. \"Dish name – 5.00\"")
-                                        return
-                                    }
-                                    const newItems: ItemWithPreview[] = parsed.map(({ name, price }) => ({
-                                        name,
-                                        price,
-                                        image_url: null,
-                                        categories: null,
-                                        category: null,
-                                    }))
-                                    onChange([...value, ...newItems])
-                                    setBulkPasteText("")
-                                    toast.success(`Added ${parsed.length} item${parsed.length === 1 ? "" : "s"}`)
-                                } catch {
-                                    toast.error("Could not read clipboard")
-                                }
-                            }}
-                        >
-                            <ClipboardPaste className="h-3.5 w-3.5 mr-2" />
-                            Paste from clipboard
-                        </Button>
-                    </div>
-                ) : (
-                    <div className="space-y-2 p-3 border rounded-md bg-muted/10">
-                        <Label className="text-xs text-muted-foreground">Paste items (one per line, e.g. &quot;Dish name – 5.00&quot;)</Label>
-                        <Textarea
-                            value={bulkPasteText}
-                            onChange={(e) => setBulkPasteText(e.target.value)}
-                            placeholder={"Pho – 5.00\nSpring rolls – 3.50\nIced tea"}
-                            rows={3}
-                            className="text-sm resize-none"
-                        />
-                        <div className="flex gap-2">
-                            <Button type="button" variant="secondary" size="sm" onClick={addFromBulkPaste} disabled={!bulkPasteText.trim()}>
-                                Add from paste
-                            </Button>
-                            <Button type="button" variant="ghost" size="sm" onClick={() => { setShowBulkPaste(false); setBulkPasteText("") }}>
-                                Cancel
-                            </Button>
-                        </div>
-                    </div>
-                )}
-            </div>
 
             {/* Add new item */}
             <div className="flex flex-col gap-2 p-3 border rounded-md bg-muted/20">

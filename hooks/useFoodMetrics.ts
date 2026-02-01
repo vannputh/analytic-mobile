@@ -33,6 +33,7 @@ export interface FoodMetrics {
     countByPriceLevel: Record<string, number>
     countByTag: Record<string, number>
     countByItemCategory: Record<string, number>
+    countByDiningType: Record<string, number>
 
     // Top entries
     topCuisine: string | null
@@ -40,6 +41,7 @@ export interface FoodMetrics {
     topNeighborhood: string | null
     topCategory: string | null
     topItemCategory: string | null
+    topDiningType: string | null
 
     // Most visited
     mostVisitedPlaces: { name: string; count: number; avgRating: number }[]
@@ -93,6 +95,7 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
         const countByPriceLevel: Record<string, number> = {}
         const countByTag: Record<string, number> = {}
         const countByItemCategory: Record<string, number> = {}
+        const countByDiningType: Record<string, number> = {}
         const ratingBuckets: Record<number, number> = {}
 
         // Track visits by place name
@@ -156,6 +159,7 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
             incrementRecord(countByNeighborhood, entry.neighborhood)
             incrementRecord(countByCategory, entry.category)
             incrementRecord(countByPriceLevel, entry.price_level)
+            incrementRecord(countByDiningType, entry.dining_type)
 
             if (month) {
                 incrementRecord(countByMonthMap, month)
@@ -278,6 +282,7 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
             countByPriceLevel,
             countByTag,
             countByItemCategory,
+            countByDiningType,
 
             // Top entries
             topCuisine: getTopEntry(countByCuisine),
@@ -285,6 +290,7 @@ export function useFoodMetrics(data: FoodEntry[]): FoodMetrics {
             topNeighborhood: getTopEntry(countByNeighborhood),
             topCategory: getTopEntry(countByCategory),
             topItemCategory: getTopEntry(countByItemCategory),
+            topDiningType: getTopEntry(countByDiningType),
 
             // Most visited
             mostVisitedPlaces,

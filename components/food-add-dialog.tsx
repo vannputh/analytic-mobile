@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useRef } from "react"
 import { FoodEntry, FoodEntryInsert, FoodEntryUpdate, ItemOrdered } from "@/lib/database.types"
-import { createFoodEntry, updateFoodEntry, uploadFoodImage, addFoodEntryImage, getFoodEntry, getUniqueCuisineTypes, getUniqueItemCategories } from "@/lib/food-actions"
-import { PRICE_LEVELS, FOOD_TAGS, formatDualCurrency, USD_TO_KHR_RATE } from "@/lib/food-types"
+import { createFoodEntry, updateFoodEntry, uploadFoodImage, addFoodEntryImage, getFoodEntry, getFoodEntries, getUniqueCuisineTypes, getUniqueItemCategories } from "@/lib/food-actions"
+import { PRICE_LEVELS, FOOD_TAGS, DINING_OPTIONS, formatDualCurrency, formatRestaurantDisplayName, USD_TO_KHR_RATE } from "@/lib/food-types"
 import {
     Dialog,
     DialogContent,
@@ -51,7 +51,7 @@ import {
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import { Calendar } from "@/components/ui/calendar"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Popover, PopoverAnchor, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { format } from "date-fns/format"
 import { isValid } from "date-fns/isValid"
 import Image from "next/image"
@@ -88,6 +88,7 @@ export function FoodAddDialog({
 
     // Form state
     const [name, setName] = useState("")
+    const [branch, setBranch] = useState("")
     const [visitDate, setVisitDate] = useState<Date | undefined>(
         entry?.visit_date
             ? new Date(entry.visit_date)
@@ -114,12 +115,22 @@ export function FoodAddDialog({
     const [valueRating, setValueRating] = useState<number | null>(null)
     const [totalPrice, setTotalPrice] = useState<string>("")
     const [priceLevel, setPriceLevel] = useState<string>("")
+    const [diningType, setDiningType] = useState<string>("")
+    const [wouldReturn, setWouldReturn] = useState<boolean | null>(null)
     const [notes, setNotes] = useState("")
     const [placeImages, setPlaceImages] = useState<{ file?: File; preview: string; is_primary: boolean }[]>([])
     const sidebarFileInputRef = useRef<HTMLInputElement>(null)
     const nameInputRef = useRef<HTMLInputElement>(null)
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false)
     const baselineRef = useRef<string | null>(null)
+
+    // Restaurant name autocomplete: suggestions and "just selected" to avoid refetch on autofill
+    const [placeSuggestions, setPlaceSuggestions] = useState<FoodEntry[]>([])
+    const [placeSuggestionsOpen, setPlaceSuggestionsOpen] = useState(false)
+    const justSelectedPlaceRef = useRef(false)
+    const placeSearchQueryRef = useRef<string>("")
+    const nameForSearchRef = useRef(name)
+    nameForSearchRef.current = name
 
     const handlePlaceFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const files = e.target.files
@@ -177,6 +188,40 @@ export function FoodAddDialog({
         loadOptions()
     }, [])
 
+    // Debounced place search for restaurant name autocomplete (new entry only)
+    useEffect(() => {
+        if (!open || isEditing) return
+        if (justSelectedPlaceRef.current) {
+            justSelectedPlaceRef.current = false
+            setPlaceSuggestions([])
+            setPlaceSuggestionsOpen(false)
+            return
+        }
+        const query = name.trim()
+        if (query.length < 2) {
+            setPlaceSuggestions([])
+            setPlaceSuggestionsOpen(false)
+            return
+        }
+        const timer = setTimeout(async () => {
+            const result = await getFoodEntries({ search: query, limit: 30 })
+            if (!result.success) return
+            if (nameForSearchRef.current.trim() !== query) return
+            const seen = new Set<string>()
+            const deduped: FoodEntry[] = []
+            for (const e of result.data) {
+                const key = `${e.name}\0${e.branch ?? ""}`
+                if (seen.has(key)) continue
+                seen.add(key)
+                deduped.push(e)
+            }
+            placeSearchQueryRef.current = query
+            setPlaceSuggestions(deduped)
+            setPlaceSuggestionsOpen(deduped.length > 0)
+        }, 280)
+        return () => clearTimeout(timer)
+    }, [open, isEditing, name])
+
     // Calculate total from items for display
     const itemsTotal = itemsOrdered.reduce((sum, item) => sum + (item.price || 0), 0)
     const displayTotal = totalPrice ? parseFloat(totalPrice) : itemsTotal
@@ -185,6 +230,7 @@ export function FoodAddDialog({
     useEffect(() => {
         if (entry) {
             setName(entry.name)
+            setBranch(entry.branch ?? "")
             setVisitDate(entry.visit_date ? new Date(entry.visit_date + "T00:00:00") : undefined)
             setCategory(entry.category || "")
             setAddress(entry.address || "")
@@ -211,22 +257,25 @@ export function FoodAddDialog({
             setValueRating(entry.value_rating)
             setTotalPrice(entry.total_price?.toString() || "")
             setPriceLevel(entry.price_level || "")
+            setDiningType(entry.dining_type || "")
+            setWouldReturn(entry.would_return ?? null)
             setNotes(entry.notes || "")
             setPlaceImages(entry.images?.map(img => ({
                 preview: img.image_url,
                 is_primary: img.is_primary
             })) || [])
             baselineRef.current = JSON.stringify({
-                name: entry.name, visitDate: entry.visit_date, category: entry.category || "", address: entry.address || "", googleMapsUrl: entry.google_maps_url || "",
+                name: entry.name, branch: entry.branch ?? "", visitDate: entry.visit_date, category: entry.category || "", address: entry.address || "", googleMapsUrl: entry.google_maps_url || "",
                 neighborhood: entry.neighborhood || "", city: entry.city || "", country: entry.country || "", instagramHandle: entry.instagram_handle || "", websiteUrl: entry.website_url || "",
                 cuisineTypes: (entry.cuisine_type || []).slice().sort(), tags: (entry.tags || []).slice().sort(),
                 items: (entry.items_ordered || []).map(i => ({ name: i.name, price: i.price })), favoriteItem: entry.favorite_item || "",
                 overallRating: entry.overall_rating, foodRating: entry.food_rating, ambianceRating: entry.ambiance_rating, serviceRating: entry.service_rating, valueRating: entry.value_rating,
-                totalPrice: entry.total_price?.toString() || "", priceLevel: entry.price_level || "", notes: entry.notes || "", placeImagesCount: entry.images?.length ?? 0
+                totalPrice: entry.total_price?.toString() || "", priceLevel: entry.price_level || "", diningType: entry.dining_type || "", wouldReturn: entry.would_return ?? null, notes: entry.notes || "", placeImagesCount: entry.images?.length ?? 0
             })
         } else if (template) {
             // Duplicate: same place, new visit (visit date = initialDate or today)
             setName(template.name)
+            setBranch(template.branch ?? "")
             setVisitDate(initialDate ? new Date(initialDate) : new Date())
             setCategory(template.category || "")
             setAddress(template.address || "")
@@ -252,6 +301,8 @@ export function FoodAddDialog({
             setValueRating(template.value_rating)
             setTotalPrice(template.total_price?.toString() || "")
             setPriceLevel(template.price_level || "")
+            setDiningType(template.dining_type || "")
+            setWouldReturn(template.would_return ?? null)
             setNotes(template.notes || "")
             setPlaceImages(template.images?.map(img => ({
                 preview: img.image_url,
@@ -259,16 +310,17 @@ export function FoodAddDialog({
             })) || [])
             const templateVisitDate = initialDate ? new Date(initialDate) : new Date()
             baselineRef.current = JSON.stringify({
-                name: template.name, visitDate: format(templateVisitDate, "yyyy-MM-dd"), category: template.category || "", address: template.address || "", googleMapsUrl: template.google_maps_url || "",
+                name: template.name, branch: template.branch ?? "", visitDate: format(templateVisitDate, "yyyy-MM-dd"), category: template.category || "", address: template.address || "", googleMapsUrl: template.google_maps_url || "",
                 neighborhood: template.neighborhood || "", city: template.city || "", country: template.country || "", instagramHandle: template.instagram_handle || "", websiteUrl: template.website_url || "",
                 cuisineTypes: (template.cuisine_type || []).slice().sort(), tags: (template.tags || []).slice().sort(),
                 items: (template.items_ordered || []).map(i => ({ name: i.name, price: i.price })), favoriteItem: template.favorite_item || "",
                 overallRating: template.overall_rating, foodRating: template.food_rating, ambianceRating: template.ambiance_rating, serviceRating: template.service_rating, valueRating: template.value_rating,
-                totalPrice: template.total_price?.toString() || "", priceLevel: template.price_level || "", notes: template.notes || "", placeImagesCount: template.images?.length ?? 0
+                totalPrice: template.total_price?.toString() || "", priceLevel: template.price_level || "", diningType: template.dining_type || "", wouldReturn: template.would_return ?? null, notes: template.notes || "", placeImagesCount: template.images?.length ?? 0
             })
         } else {
             // Reset for new entry
             setName("")
+            setBranch("")
             setVisitDate(initialDate ? new Date(initialDate) : new Date())
             setCategory("")
             setAddress("")
@@ -289,13 +341,15 @@ export function FoodAddDialog({
             setValueRating(null)
             setTotalPrice("")
             setPriceLevel("")
+            setDiningType("")
+            setWouldReturn(null)
             setNotes("")
             setPlaceImages([])
             const defaultVisit = initialDate ? new Date(initialDate) : new Date()
             baselineRef.current = JSON.stringify({
-                name: "", visitDate: format(defaultVisit, "yyyy-MM-dd"), category: "", address: "", googleMapsUrl: "", neighborhood: "", city: "", country: "Cambodia", instagramHandle: "", websiteUrl: "",
+                name: "", branch: "", visitDate: format(defaultVisit, "yyyy-MM-dd"), category: "", address: "", googleMapsUrl: "", neighborhood: "", city: "", country: "Cambodia", instagramHandle: "", websiteUrl: "",
                 cuisineTypes: [], tags: [], items: [], favoriteItem: "", overallRating: null, foodRating: null, ambianceRating: null, serviceRating: null, valueRating: null,
-                totalPrice: "", priceLevel: "", notes: "", placeImagesCount: 0
+                totalPrice: "", priceLevel: "", diningType: "", wouldReturn: null, notes: "", placeImagesCount: 0
             })
         }
     }, [entry, template, initialDate, open])
@@ -338,6 +392,7 @@ export function FoodAddDialog({
     const getCurrentSnapshot = () =>
         JSON.stringify({
             name: name,
+            branch: branch,
             visitDate: visitDate && isValid(visitDate) ? format(visitDate, "yyyy-MM-dd") : "",
             category: category,
             address: address,
@@ -358,6 +413,8 @@ export function FoodAddDialog({
             valueRating: valueRating,
             totalPrice: totalPrice,
             priceLevel: priceLevel,
+            diningType: diningType,
+            wouldReturn: wouldReturn,
             notes: notes,
             placeImagesCount: placeImages.length,
         })
@@ -392,8 +449,11 @@ export function FoodAddDialog({
         setIsSubmitting(true)
 
         try {
-            // Calculate final total - use manual entry if provided, otherwise sum of items
-            const finalTotal = totalPrice ? parseFloat(totalPrice) : itemsTotal || null
+            // When items exist, always use their sum as total_price so the card shows the correct value after edit
+            const finalTotal =
+                itemsOrdered.length > 0
+                    ? itemsTotal || null
+                    : (totalPrice ? parseFloat(totalPrice) || null : null)
 
             // Prepare items data (without file references for database)
             const itemsForDb: ItemOrdered[] = itemsOrdered.map(item => ({
@@ -406,6 +466,7 @@ export function FoodAddDialog({
 
             const data: FoodEntryInsert | FoodEntryUpdate = {
                 name: name.trim(),
+                branch: branch.trim() || null,
                 visit_date: visitDate && isValid(visitDate) ? format(visitDate, "yyyy-MM-dd") : format(new Date(), "yyyy-MM-dd"),
                 category: category || null,
                 address: address || null,
@@ -427,6 +488,8 @@ export function FoodAddDialog({
                 total_price: finalTotal,
                 currency: "USD",
                 price_level: priceLevel || null,
+                dining_type: diningType || null,
+                would_return: wouldReturn,
                 notes: notes || null,
             }
 
@@ -509,6 +572,23 @@ export function FoodAddDialog({
     const isMapsUrl = (s: string) =>
         /google\.com\/maps|maps\.google|goo\.gl\/maps|maps\.app\.goo\.gl/i.test(s?.trim() ?? "")
 
+    const applyPlaceSuggestion = (e: FoodEntry) => {
+        justSelectedPlaceRef.current = true
+        setName(e.name)
+        setBranch(e.branch ?? "")
+        setCategory(e.category ?? "")
+        setCuisineTypes(e.cuisine_type ?? [])
+        setAddress(e.address ?? "")
+        setGoogleMapsUrl(e.google_maps_url ?? "")
+        setNeighborhood(e.neighborhood ?? "")
+        setCity(e.city ?? "")
+        setCountry(e.country ?? "Cambodia")
+        setInstagramHandle(e.instagram_handle ?? "")
+        setWebsiteUrl(e.website_url ?? "")
+        setPlaceSuggestions([])
+        setPlaceSuggestionsOpen(false)
+    }
+
     const handleAutofill = async (urlOverride?: string) => {
         const urlToUse = urlOverride ?? googleMapsUrl
         if (!urlToUse?.trim()) {
@@ -558,6 +638,11 @@ export function FoodAddDialog({
     const [activeTab, setActiveTab] = useState("general")
     const tabs = ["general", "location", "items", "ratings", "notes"] as const
 
+    // Always open on general tab when dialog opens (add, edit, or duplicate)
+    useEffect(() => {
+        if (open) setActiveTab("general")
+    }, [open])
+
     return (
         <>
         <Dialog open={open} onOpenChange={handleOpenChange}>
@@ -583,7 +668,7 @@ export function FoodAddDialog({
                         {/* Title */}
                         <div className="flex-1 min-w-0">
                             <DialogTitle className="font-semibold text-base truncate h-auto leading-none">
-                                {isEditing ? name || "Edit Entry" : "Add New Entry"}
+                                {isEditing ? (name ? formatRestaurantDisplayName({ name, branch }) : "Edit Entry") : "Add New Entry"}
                             </DialogTitle>
                             <DialogDescription className="text-sm text-muted-foreground truncate">
                                 {visitDate && isValid(visitDate) ? format(visitDate, "PPP") : "Add details for your food review"}
@@ -751,9 +836,9 @@ export function FoodAddDialog({
                     <div className="flex-1 flex flex-col min-w-0 bg-background overflow-hidden h-full">
                         {/* Desktop Header */}
                         <DialogHeader className="hidden md:block px-6 py-4 border-b shrink-0">
-                            <DialogTitle className="text-xl truncate" title={name || "New Entry"}>
+                            <DialogTitle className="text-xl truncate" title={name ? formatRestaurantDisplayName({ name, branch }) : "New Entry"}>
                                 {isEditing ? "Edit Entry" : "Add New Entry"}
-                                {name && <span className="text-muted-foreground font-normal text-base ml-2">{name}</span>}
+                                {name && <span className="text-muted-foreground font-normal text-base ml-2">{formatRestaurantDisplayName({ name, branch })}</span>}
                             </DialogTitle>
                         </DialogHeader>
 
@@ -810,13 +895,57 @@ export function FoodAddDialog({
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                             <div className="space-y-2 col-span-full">
                                                 <Label htmlFor="name">Restaurant / Place Name <span className="text-red-500">*</span></Label>
+                                                <Popover open={placeSuggestionsOpen && placeSuggestions.length > 0} onOpenChange={(open) => !open && setPlaceSuggestionsOpen(false)}>
+                                                    <PopoverAnchor asChild>
+                                                        <div className="relative">
+                                                            <Input
+                                                                ref={nameInputRef}
+                                                                id="name"
+                                                                value={name}
+                                                                onChange={(e) => setName(e.target.value)}
+                                                                placeholder="e.g., Sushi Masato (type to see existing places)"
+                                                                required
+                                                                autoComplete="off"
+                                                            />
+                                                        </div>
+                                                    </PopoverAnchor>
+                                                    <PopoverContent
+                                                        className="w-[var(--radix-popover-trigger-width)] p-0"
+                                                        align="start"
+                                                        sideOffset={4}
+                                                        onOpenAutoFocus={(e) => e.preventDefault()}
+                                                        onCloseAutoFocus={(e) => e.preventDefault()}
+                                                    >
+                                                        <Command
+                                                            shouldFilter={false}
+                                                            onPointerDown={(e) => e.preventDefault()}
+                                                        >
+                                                            <CommandList>
+                                                                <CommandEmpty>No places found.</CommandEmpty>
+                                                                <CommandGroup>
+                                                                    {placeSuggestions.map((e) => (
+                                                                        <CommandItem
+                                                                            key={`${e.name}\0${e.branch ?? ""}`}
+                                                                            value={`${e.name}\0${e.branch ?? ""}`}
+                                                                            onSelect={() => applyPlaceSuggestion(e)}
+                                                                        >
+                                                                            {formatRestaurantDisplayName({ name: e.name, branch: e.branch ?? "" })}
+                                                                        </CommandItem>
+                                                                    ))}
+                                                                </CommandGroup>
+                                                            </CommandList>
+                                                        </Command>
+                                                    </PopoverContent>
+                                                </Popover>
+                                            </div>
+
+                                            <div className="space-y-2 col-span-full">
+                                                <Label htmlFor="branch">Branch / Location</Label>
                                                 <Input
-                                                    ref={nameInputRef}
-                                                    id="name"
-                                                    value={name}
-                                                    onChange={(e) => setName(e.target.value)}
-                                                    placeholder="e.g., Sushi Masato"
-                                                    required
+                                                    id="branch"
+                                                    value={branch}
+                                                    onChange={(e) => setBranch(e.target.value)}
+                                                    placeholder="e.g., Mall, Airport"
                                                 />
                                             </div>
 
@@ -869,6 +998,23 @@ export function FoodAddDialog({
                                                         />
                                                     </PopoverContent>
                                                 </Popover>
+                                            </div>
+
+                                            <div className="space-y-2">
+                                                <Label htmlFor="diningType">Dining type</Label>
+                                                <Select value={diningType || "_none"} onValueChange={(v) => setDiningType(v === "_none" ? "" : v)}>
+                                                    <SelectTrigger id="diningType">
+                                                        <SelectValue placeholder="Not set" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="_none">—</SelectItem>
+                                                        {DINING_OPTIONS.map((opt) => (
+                                                            <SelectItem key={opt.value} value={opt.value}>
+                                                                {opt.label}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
                                             </div>
                                         </div>
                                     </div>
@@ -949,7 +1095,11 @@ export function FoodAddDialog({
                                     <div className="space-y-4">
                                         <ItemsOrderedInput
                                             value={itemsOrdered}
-                                            onChange={setItemsOrdered}
+                                            onChange={(newItems) => {
+                                                setItemsOrdered(newItems)
+                                                const sum = newItems.reduce((s, i) => s + (i.price ?? 0), 0)
+                                                setTotalPrice(sum > 0 ? sum.toFixed(2) : "")
+                                            }}
                                             favoriteItem={favoriteItem}
                                             onFavoriteChange={setFavoriteItem}
                                             availableCategories={availableItemCategories}
@@ -1016,6 +1166,23 @@ export function FoodAddDialog({
                                                     </Select>
                                                 </div>
                                             </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <Label htmlFor="wouldReturn">Would go back</Label>
+                                            <Select
+                                                value={wouldReturn === null ? "_none" : wouldReturn ? "true" : "false"}
+                                                onValueChange={(v) => setWouldReturn(v === "_none" ? null : v === "true")}
+                                            >
+                                                <SelectTrigger id="wouldReturn">
+                                                    <SelectValue placeholder="Not set" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="_none">— Not set</SelectItem>
+                                                    <SelectItem value="true">Yes</SelectItem>
+                                                    <SelectItem value="false">No</SelectItem>
+                                                </SelectContent>
+                                            </Select>
                                         </div>
                                     </div>
                                 )}

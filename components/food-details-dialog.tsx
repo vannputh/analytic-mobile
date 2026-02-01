@@ -30,7 +30,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
-import { formatDualCurrency } from "@/lib/food-types"
+import { formatDualCurrency, formatRestaurantDisplayName, DINING_OPTIONS } from "@/lib/food-types"
 import Image from "next/image"
 
 interface FoodDetailsDialogProps {
@@ -167,8 +167,8 @@ export function FoodDetailsDialog({
                             <div className="w-full">
                                 <FoodGallery
                                     images={images.length > 0
-                                        ? images.map(img => ({ url: img.image_url, alt: entry.name }))
-                                        : [{ url: entry.primary_image_url!, alt: entry.name }]
+                                        ? images.map(img => ({ url: img.image_url, alt: formatRestaurantDisplayName(entry) }))
+                                        : [{ url: entry.primary_image_url!, alt: formatRestaurantDisplayName(entry) }]
                                     }
                                     className="rounded-none [&>div:first-child]:rounded-none [&>div:first-child]:aspect-[16/9] md:[&>div:first-child]:aspect-[21/9]"
                                 />
@@ -186,14 +186,19 @@ export function FoodDetailsDialog({
                     {/* Header with Title */}
                     <div className="px-6 py-4 border-b bg-background sticky top-0 z-10">
                         <DialogHeader>
-                            <DialogTitle className="text-xl md:text-2xl truncate" title={entry.name}>
-                                {entry.name}
+                            <DialogTitle className="text-xl md:text-2xl truncate" title={formatRestaurantDisplayName(entry)}>
+                                {formatRestaurantDisplayName(entry)}
                             </DialogTitle>
                             <DialogDescription className="flex flex-wrap items-center gap-2 mt-1">
                                 {entry.category && (
                                     <Badge variant="outline" className="text-xs">
                                         <Utensils className="h-3 w-3 mr-1" />
                                         {entry.category}
+                                    </Badge>
+                                )}
+                                {entry.dining_type && (
+                                    <Badge variant="outline" className="text-xs">
+                                        {DINING_OPTIONS.find((o) => o.value === entry.dining_type)?.label ?? entry.dining_type}
                                     </Badge>
                                 )}
                                 <span className="text-sm text-muted-foreground">
@@ -286,6 +291,15 @@ export function FoodDetailsDialog({
                                         </div>
                                     )}
                                 </div>
+
+                                {entry.would_return !== null && entry.would_return !== undefined && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-muted-foreground">Would go back</span>
+                                        <Badge variant={entry.would_return ? "default" : "secondary"}>
+                                            {entry.would_return ? "Yes" : "No"}
+                                        </Badge>
+                                    </div>
+                                )}
                             </div>
                         )}
 
@@ -475,7 +489,7 @@ export function FoodDetailsDialog({
                 <DialogHeader>
                     <DialogTitle>Delete entry?</DialogTitle>
                     <DialogDescription>
-                        This will permanently remove &quot;{entry.name}&quot; from your food log. This action cannot be undone.
+                        This will permanently remove &quot;{formatRestaurantDisplayName(entry)}&quot; from your food log. This action cannot be undone.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter className="gap-2 sm:gap-0">

@@ -6,7 +6,6 @@ import {
     MapPin,
     Star,
     Heart,
-    TrendingUp,
 } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
@@ -85,14 +84,14 @@ export function FoodKPIGrid({ metrics }: FoodKPIGridProps) {
                 icon={<Star className="h-8 w-8" />}
             />
             <KPICard
-                label="Top Cuisine"
-                value={metrics.topCuisine || "—"}
+                label="Top City"
+                value={metrics.topCity || "—"}
                 subValue={
-                    metrics.topCuisine && metrics.countByCuisine[metrics.topCuisine]
-                        ? `${metrics.countByCuisine[metrics.topCuisine]} visits`
+                    metrics.topCity && metrics.countByCity[metrics.topCity]
+                        ? `${metrics.countByCity[metrics.topCity]} visits`
                         : undefined
                 }
-                icon={<TrendingUp className="h-8 w-8" />}
+                icon={<MapPin className="h-8 w-8" />}
             />
             <KPICard
                 label="Top Food Type"

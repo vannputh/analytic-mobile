@@ -1,6 +1,7 @@
 "use client";
 
 import { FoodEntry } from "@/lib/database.types";
+import { formatRestaurantDisplayName } from "@/lib/food-types";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 
@@ -68,12 +69,12 @@ export function CalendarDayCell({
                         <div
                             key={entry.id}
                             className="flex items-center gap-1 text-[10px] sm:text-xs truncate"
-                            title={entry.name}
+                            title={formatRestaurantDisplayName(entry)}
                         >
                             <span className="text-amber-500">
                                 {entry.overall_rating ? "★" : "•"}
                             </span>
-                            <span className="truncate">{entry.name}</span>
+                            <span className="truncate">{formatRestaurantDisplayName(entry)}</span>
                         </div>
                     ))}
                     {entries.length > 3 && (

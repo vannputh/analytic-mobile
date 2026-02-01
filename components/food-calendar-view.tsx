@@ -18,8 +18,8 @@ interface FoodCalendarViewProps {
     refreshTrigger?: number
 }
 
-const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"]
-const WEEKDAYS_SHORT = ["S", "M", "T", "W", "T", "F", "S"]
+const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+const WEEKDAYS_SHORT = ["M", "T", "W", "T", "F", "S", "S"]
 
 function getDaysInMonth(year: number, month: number): number {
     return new Date(year, month + 1, 0).getDate()
@@ -73,16 +73,18 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
 
     const daysInMonth = getDaysInMonth(currentYear, currentMonth)
     const firstDayOfMonth = getFirstDayOfMonth(currentYear, currentMonth)
+    // Monday = 0, Tuesday = 1, ..., Sunday = 6
+    const firstWeekdayOffset = (firstDayOfMonth + 6) % 7
 
     const calendarDays = useMemo(() => {
         const days: { date: string; day: number; isCurrentMonth: boolean; isToday: boolean }[] = []
 
-        // Previous month days to fill the first week
+        // Previous month days to fill the first week (Monday-based)
         const prevMonth = currentMonth === 0 ? 11 : currentMonth - 1
         const prevYear = currentMonth === 0 ? currentYear - 1 : currentYear
         const daysInPrevMonth = getDaysInMonth(prevYear, prevMonth)
 
-        for (let i = firstDayOfMonth - 1; i >= 0; i--) {
+        for (let i = firstWeekdayOffset - 1; i >= 0; i--) {
             const day = daysInPrevMonth - i
             const date = `${prevYear}-${String(prevMonth + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`
             days.push({ date, day, isCurrentMonth: false, isToday: false })
@@ -109,7 +111,7 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
         }
 
         return days
-    }, [currentYear, currentMonth, daysInMonth, firstDayOfMonth, today])
+    }, [currentYear, currentMonth, daysInMonth, firstWeekdayOffset, today])
 
     const goToPreviousMonth = () => {
         if (currentMonth === 0) {
@@ -165,16 +167,24 @@ export function FoodCalendarView({ onAddEntry, onViewEntry, onEditEntry, refresh
             {/* Calendar Grid */}
             <div className="border rounded-lg overflow-hidden bg-card">
                 {/* Weekday Headers */}
-                <div className="grid grid-cols-7 bg-muted/50">
-                    {WEEKDAYS.map((day, i) => (
-                        <div
-                            key={day}
-                            className="p-2 text-center text-xs font-medium text-muted-foreground border-b"
-                        >
-                            <span className="hidden sm:inline">{day}</span>
-                            <span className="sm:hidden">{WEEKDAYS_SHORT[i]}</span>
-                        </div>
-                    ))}
+                <div className="grid grid-cols-7 border-b-2 border-border">
+                    {WEEKDAYS.map((day, i) => {
+                        const isWeekend = day === "Sat" || day === "Sun"
+                        return (
+                            <div
+                                key={day}
+                                className={cn(
+                                    "py-2.5 px-1 text-center text-[11px] font-semibold uppercase tracking-wider",
+                                    isWeekend
+                                        ? "bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200"
+                                        : "bg-muted text-foreground/90"
+                                )}
+                            >
+                                <span className="hidden sm:inline">{day}</span>
+                                <span className="sm:hidden">{WEEKDAYS_SHORT[i]}</span>
+                            </div>
+                        )
+                    })}
                 </div>
 
                 {/* Calendar Days */}

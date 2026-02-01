@@ -11,8 +11,14 @@ import {
 } from "recharts"
 import { CHART_COLORS, tooltipStyle, emptyStateClass, formatNumber } from "./chart-config"
 
+export interface PieChartSegment {
+    name: string
+    value: number
+    [key: string]: unknown
+}
+
 interface SimplePieChartProps {
-    data: Record<string, number> | { name: string; value: number }[]
+    data: Record<string, number> | { name: string; value: number; drillValue?: string }[]
     title?: string
     height?: number
     innerRadius?: number
@@ -22,6 +28,7 @@ interface SimplePieChartProps {
     valueFormatter?: (value: number) => string
     valueLabel?: string
     showPercentLabel?: boolean
+    onSegmentClick?: (segment: PieChartSegment) => void
 }
 
 export function SimplePieChart({
@@ -35,12 +42,13 @@ export function SimplePieChart({
     valueFormatter = formatNumber,
     valueLabel = "Count",
     showPercentLabel = true,
+    onSegmentClick,
 }: SimplePieChartProps) {
-    const chartData = useMemo(() => {
-        let processedData: { name: string; value: number }[] = []
+    const chartData = useMemo((): PieChartSegment[] => {
+        let processedData: PieChartSegment[] = []
 
         if (Array.isArray(data)) {
-            processedData = data
+            processedData = data.map((d) => ({ ...d, name: d.name, value: d.value }))
         } else {
             processedData = Object.entries(data)
                 .filter(([name]) => name && name !== "null" && name !== "undefined")
@@ -77,6 +85,8 @@ export function SimplePieChart({
                         return `${(p * 100).toFixed(0)}%`
                     } : undefined}
                     labelLine={showPercentLabel ? { stroke: "hsl(0, 0%, 60%)", strokeWidth: 1 } : false}
+                    onClick={onSegmentClick ? (_, index) => chartData[index] && onSegmentClick(chartData[index]) : undefined}
+                    style={onSegmentClick ? { cursor: "pointer" } : undefined}
                 >
                     {chartData.map((_, index) => (
                         <Cell

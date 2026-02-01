@@ -4,13 +4,14 @@ import { X, Filter, RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { FoodFilterState, defaultFoodFilterState } from "@/lib/food-types"
+import { FoodFilterState, defaultFoodFilterState, DINING_OPTIONS, DINING_TYPE_VALUES } from "@/lib/food-types"
 import { MultiSelect, DateRangePicker } from "@/components/filter-components"
 
 interface FilterOptions {
     itemCategories: string[]
     cuisineTypes: string[]
     categories: string[]
+    cities: string[]
     priceLevels: string[]
 }
 
@@ -35,14 +36,22 @@ export function FoodFilterBar({
         filters.itemCategories.length > 0 ||
         filters.cuisineTypes.length > 0 ||
         filters.categories.length > 0 ||
-        filters.priceLevels.length > 0
+        filters.cities.length > 0 ||
+        filters.priceLevels.length > 0 ||
+        filters.diningTypes.length > 0 ||
+        filters.minRating !== null ||
+        filters.wouldReturn !== null
 
     const activeFilterCount = [
         filters.dateFrom || filters.dateTo ? 1 : 0,
         filters.itemCategories.length,
         filters.cuisineTypes.length,
         filters.categories.length,
+        filters.cities.length,
         filters.priceLevels.length,
+        filters.diningTypes.length,
+        filters.minRating !== null ? 1 : 0,
+        filters.wouldReturn !== null ? 1 : 0,
     ].reduce((a, b) => a + b, 0)
 
     return (
@@ -83,10 +92,70 @@ export function FoodFilterBar({
                 />
 
                 <MultiSelect
+                    label="City"
+                    options={options.cities}
+                    selected={filters.cities}
+                    onChange={(cities) => onFiltersChange({ ...filters, cities })}
+                />
+
+                <MultiSelect
                     label="Price"
                     options={options.priceLevels}
                     selected={filters.priceLevels}
                     onChange={(priceLevels) => onFiltersChange({ ...filters, priceLevels })}
+                />
+
+                <MultiSelect
+                    label="Dining type"
+                    options={DINING_TYPE_VALUES}
+                    selected={filters.diningTypes}
+                    onChange={(diningTypes) => onFiltersChange({ ...filters, diningTypes })}
+                />
+
+                <MultiSelect
+                    label="Min rating"
+                    options={["4+", "5"]}
+                    selected={
+                        filters.minRating === null
+                            ? []
+                            : filters.minRating === 4
+                              ? ["4+"]
+                              : ["5"]
+                    }
+                    onChange={(selected) => {
+                        const minRating =
+                            selected.length === 0
+                                ? null
+                                : selected.includes("5")
+                                  ? 5
+                                  : selected.includes("4+")
+                                    ? 4
+                                    : null
+                        onFiltersChange({ ...filters, minRating })
+                    }}
+                />
+
+                <MultiSelect
+                    label="Would go back"
+                    options={["Yes", "No"]}
+                    selected={
+                        filters.wouldReturn === null
+                            ? []
+                            : filters.wouldReturn
+                              ? ["Yes"]
+                              : ["No"]
+                    }
+                    onChange={(selected) => {
+                        const wouldReturn =
+                            selected.length === 0
+                                ? null
+                                : selected.includes("Yes")
+                                  ? true
+                                  : selected.includes("No")
+                                    ? false
+                                    : null
+                        onFiltersChange({ ...filters, wouldReturn })
+                    }}
                 />
 
                 {hasActiveFilters && (
@@ -177,6 +246,22 @@ export function FoodFilterBar({
                             <X className="ml-1 h-2.5 w-2.5" />
                         </button>
                     ))}
+                    {filters.cities.map((c) => (
+                        <button
+                            key={c}
+                            type="button"
+                            onClick={() =>
+                                onFiltersChange({
+                                    ...filters,
+                                    cities: filters.cities.filter((x) => x !== c),
+                                })
+                            }
+                            className="inline-flex items-center h-5 px-1.5 text-[10px] font-mono rounded-sm bg-secondary hover:bg-destructive/20 transition-colors"
+                        >
+                            {c}
+                            <X className="ml-1 h-2.5 w-2.5" />
+                        </button>
+                    ))}
                     {filters.priceLevels.map((p) => (
                         <button
                             key={p}
@@ -193,6 +278,42 @@ export function FoodFilterBar({
                             <X className="ml-1 h-2.5 w-2.5" />
                         </button>
                     ))}
+                    {filters.diningTypes.map((d) => (
+                        <button
+                            key={d}
+                            type="button"
+                            onClick={() =>
+                                onFiltersChange({
+                                    ...filters,
+                                    diningTypes: filters.diningTypes.filter((x) => x !== d),
+                                })
+                            }
+                            className="inline-flex items-center h-5 px-1.5 text-[10px] font-mono rounded-sm bg-secondary hover:bg-destructive/20 transition-colors"
+                        >
+                            {DINING_OPTIONS.find((o) => o.value === d)?.label ?? d}
+                            <X className="ml-1 h-2.5 w-2.5" />
+                        </button>
+                    ))}
+                    {filters.minRating !== null && (
+                        <button
+                            type="button"
+                            onClick={() => onFiltersChange({ ...filters, minRating: null })}
+                            className="inline-flex items-center h-5 px-1.5 text-[10px] font-mono rounded-sm bg-secondary hover:bg-destructive/20 transition-colors"
+                        >
+                            Min rating: {filters.minRating === 5 ? "5" : `${filters.minRating}+`}
+                            <X className="ml-1 h-2.5 w-2.5" />
+                        </button>
+                    )}
+                    {filters.wouldReturn !== null && (
+                        <button
+                            type="button"
+                            onClick={() => onFiltersChange({ ...filters, wouldReturn: null })}
+                            className="inline-flex items-center h-5 px-1.5 text-[10px] font-mono rounded-sm bg-secondary hover:bg-destructive/20 transition-colors"
+                        >
+                            Would return: {filters.wouldReturn ? "Yes" : "No"}
+                            <X className="ml-1 h-2.5 w-2.5" />
+                        </button>
+                    )}
                 </div>
             )}
         </div>

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Star, MapPin, DollarSign, Edit2, ExternalLink, Instagram } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { formatDualCurrency } from "@/lib/food-types"
+import { formatDualCurrency, formatRestaurantDisplayName } from "@/lib/food-types"
 import Image from "next/image"
 
 const CLICK_DELAY_MS = 250
@@ -98,14 +98,14 @@ export function FoodEntryCard({ entry, onClick, onEdit, compact = false }: FoodE
                     <div className="relative w-full h-32 bg-muted/20">
                         <Image
                             src={entry.primary_image_url}
-                            alt={entry.name}
+                            alt={formatRestaurantDisplayName(entry)}
                             fill
                             className="object-cover transition-transform group-hover:scale-105"
                         />
                         <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-60" />
                         <div className="absolute bottom-2 left-3 right-3 flex justify-between items-end">
                             <h4 className="font-medium text-white text-sm truncate shadow-sm">
-                                {entry.name}
+                                {formatRestaurantDisplayName(entry)}
                             </h4>
                         </div>
                     </div>
@@ -117,7 +117,7 @@ export function FoodEntryCard({ entry, onClick, onEdit, compact = false }: FoodE
                             {/* Name (if no image or compact) */}
                             {(!entry.primary_image_url || compact) && (
                                 <h4 className="font-medium text-sm truncate group-hover:text-primary transition-colors">
-                                    {entry.name}
+                                    {formatRestaurantDisplayName(entry)}
                                 </h4>
                             )}
 

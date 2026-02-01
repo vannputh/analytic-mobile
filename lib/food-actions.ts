@@ -23,6 +23,7 @@ export interface FoodFilters {
     cuisineTypes?: string[]
     itemCategories?: string[]
     priceLevels?: string[]
+    diningTypes?: string[]
     city?: string
     minRating?: number | null
     wouldReturn?: boolean | null
@@ -62,6 +63,10 @@ function applyFoodFilters(query: any, filters?: FoodFilters) {
         q = q.in('price_level', filters.priceLevels)
     }
 
+    if (filters.diningTypes && filters.diningTypes.length > 0) {
+        q = q.in('dining_type', filters.diningTypes)
+    }
+
     if (filters.wouldReturn !== undefined && filters.wouldReturn !== null) {
         q = q.eq('would_return', filters.wouldReturn)
     }
@@ -75,7 +80,9 @@ function applyFoodFilters(query: any, filters?: FoodFilters) {
     }
 
     if (filters.search) {
-        q = q.ilike('name', `%${filters.search}%`)
+        const escaped = filters.search.replace(/"/g, '""')
+        const pattern = `"%${escaped}%"`
+        q = q.or(`name.ilike.${pattern},branch.ilike.${pattern}`)
     }
 
     return q
