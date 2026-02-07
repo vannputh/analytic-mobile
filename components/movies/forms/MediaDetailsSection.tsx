@@ -145,7 +145,7 @@ export function MediaDetailsSection({
                         type="number"
                         step="0.01"
                         min="0"
-                        value={formData.price || ""}
+                        value={formData.price ?? ""}
                         onChange={(e) =>
                             setFormData({
                                 ...formData,

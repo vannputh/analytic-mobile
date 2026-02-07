@@ -15,6 +15,7 @@ interface BasicDetailsSectionProps {
     imdbId: string | null
     detectISBN: (val: string) => string | null
     detectIMDbID: (val: string) => boolean
+    autoFocus?: boolean
 }
 
 export function BasicDetailsSection({
@@ -26,6 +27,7 @@ export function BasicDetailsSection({
     imdbId,
     detectISBN,
     detectIMDbID,
+    autoFocus,
 }: BasicDetailsSectionProps) {
     const hasValidIdentifier = (title?.trim() || detectISBN(imdbId || "") || detectIMDbID(imdbId || ""))
 
@@ -42,6 +44,7 @@ export function BasicDetailsSection({
                     placeholder="Enter title"
                     required
                     className="flex-1"
+                    autoFocus={autoFocus}
                 />
                 <div className="flex gap-2">
                     <Button

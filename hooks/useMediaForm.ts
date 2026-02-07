@@ -190,16 +190,19 @@ export function useMediaForm(entryId?: string | null) {
         }
     }, [entryId, router])
 
-    // Default start_date to today when creating (run once on mount for create mode)
+    // Default start_date, status, medium, and price when creating (run once on mount for create mode)
     const hasSetCreateDefaults = useRef(false)
     useEffect(() => {
         if (!entryId && !fetching && !hasSetCreateDefaults.current) {
             hasSetCreateDefaults.current = true
-            setFormData((prev) =>
-                prev.start_date == null
-                    ? { ...prev, start_date: new Date().toISOString().split("T")[0] }
-                    : prev
-            )
+            setFormData((prev) => {
+                const updates: Partial<MediaFormData> = {}
+                if (prev.start_date == null) updates.start_date = new Date().toISOString().split("T")[0]
+                if (prev.status == null) updates.status = "Watching"
+                if (prev.medium == null) updates.medium = "Movie"
+                if (prev.price == null) updates.price = 0
+                return Object.keys(updates).length ? { ...prev, ...updates } : prev
+            })
         }
     }, [entryId, fetching])
 
@@ -311,7 +314,7 @@ export function useMediaForm(entryId?: string | null) {
                 season: formData.season?.trim() || null,
                 episodes: formData.episodes || null,
                 length: formData.length?.trim() || null,
-                price: formData.price || null,
+                price: formData.price ?? 0,
                 language: formData.language && formData.language.length > 0 ? formData.language : null,
                 platform: formData.platform?.trim() || null,
                 status: formData.status || null,

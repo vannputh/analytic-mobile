@@ -1,5 +1,5 @@
 export const TYPE_OPTIONS = ["Documentary", "Variety", "Reality", "Scripted Live Action", "Animation", "Special", "Audio"] as const;
-export const STATUS_OPTIONS = ["Finished", "Watching", "Currently Watching", "On Hold", "Dropped", "Plan to Watch"] as const;
+export const STATUS_OPTIONS = ["Finished", "Watching", "Currently Watching", "On Hold", "Dropped", "Plan to Watch", "Planned"] as const;
 export const PLATFORM_OPTIONS = ["Netflix", "Hulu", "Disney+", "Amazon Prime", "HBO Max", "Apple TV+", "YouTube", "Spotify", "Audible", "Steam", "PlayStation", "Xbox", "Nintendo", "Other"] as const;
 export const MEDIUM_OPTIONS = ["Movie", "TV Show", "Book", "Game", "Podcast", "Live Theatre"] as const;
 

@@ -22,7 +22,7 @@ export function RatingSection({ formData, setFormData }: RatingSectionProps) {
                     step="0.1"
                     min="0"
                     max="10"
-                    value={formData.my_rating || ""}
+                    value={formData.my_rating ?? ""}
                     onChange={(e) =>
                         setFormData({
                             ...formData,
@@ -43,7 +43,7 @@ export function RatingSection({ formData, setFormData }: RatingSectionProps) {
                     step="0.1"
                     min="0"
                     max="10"
-                    value={formData.average_rating || ""}
+                    value={formData.average_rating ?? ""}
                     onChange={(e) =>
                         setFormData({
                             ...formData,

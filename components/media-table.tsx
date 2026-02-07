@@ -26,7 +26,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ArrowUpDown, ArrowUp, ArrowDown, Sparkles, Loader2, CheckSquare, Square, Edit, RotateCcw } from "lucide-react";
+import { ArrowUpDown, ArrowUp, ArrowDown, Sparkles, Loader2, CheckSquare, Square, Edit, RotateCcw, Calendar } from "lucide-react";
+import { format } from "date-fns";
 import { BatchEditDialog } from "@/components/shared/BatchEditDialog";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase";
@@ -87,6 +88,8 @@ interface MediaTableProps {
   showSelectMode?: boolean;
   onSelectModeChange?: (show: boolean) => void;
   columnPicker?: React.ReactNode;
+  /** When set (e.g. "finish_date"), prepend Month/Day columns and group rows by month. Use for Watched diary layout. */
+  diaryDateField?: "finish_date" | null;
 }
 
 type SortColumn =
@@ -153,7 +156,28 @@ export const COLUMN_DEFINITIONS: Record<ColumnKey, { label: string; defaultVisib
   finish_date: { label: "Finish Date", defaultVisible: true },
 };
 
-export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate, showSelectMode = false, onSelectModeChange }: MediaTableProps) {
+function getMonthKey(finishDate: string | null): string | null {
+  if (!finishDate) return null;
+  const d = new Date(finishDate);
+  if (isNaN(d.getTime())) return null;
+  return format(d, "yyyy-MM");
+}
+
+function getMonthLabel(finishDate: string | null): string {
+  if (!finishDate) return "—";
+  const d = new Date(finishDate);
+  if (isNaN(d.getTime())) return "—";
+  return format(d, "MMM yyyy").toUpperCase();
+}
+
+function getDay(finishDate: string | null): string {
+  if (!finishDate) return "—";
+  const d = new Date(finishDate);
+  if (isNaN(d.getTime())) return "—";
+  return format(d, "dd");
+}
+
+export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate, showSelectMode = false, onSelectModeChange, diaryDateField = null }: MediaTableProps) {
   /* Sorting Logic via Hook */
   const getValueForColumn = (entry: MediaEntry, column: ColumnKey) => {
     switch (column) {
@@ -209,8 +233,39 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
   } = useSortedEntries({
     entries,
     getValueForColumn,
-    defaultSort: { column: null, direction: null }
+    defaultSort:
+      diaryDateField === "finish_date"
+        ? { column: "finish_date" as SortColumn, direction: "desc" as SortDirection }
+        : { column: null, direction: null }
   });
+
+  const diaryGroups = useMemo(() => {
+    if (diaryDateField !== "finish_date") return null;
+    const byMonth = new Map<string, MediaEntry[]>();
+    for (const entry of sortedEntries) {
+      const key = getMonthKey(entry.finish_date);
+      if (key) {
+        const list = byMonth.get(key) ?? [];
+        list.push(entry);
+        byMonth.set(key, list);
+      }
+    }
+    return Array.from(byMonth.entries()).sort(([a], [b]) => b.localeCompare(a));
+  }, [diaryDateField, sortedEntries]);
+
+  type RowData = { entry: MediaEntry; monthLabel: string | null; groupLength: number };
+  const tableRowsData = useMemo((): RowData[] => {
+    if (diaryGroups && diaryGroups.length > 0) {
+      return diaryGroups.flatMap(([, groupEntries]) =>
+        groupEntries.map((entry, idx) => ({
+          entry,
+          monthLabel: idx === 0 ? getMonthLabel(groupEntries[0].finish_date) : null,
+          groupLength: idx === 0 ? groupEntries.length : 0
+        }))
+      );
+    }
+    return sortedEntries.map((entry) => ({ entry, monthLabel: null, groupLength: 0 }));
+  }, [diaryGroups, sortedEntries]);
 
   const getSortIcon = (column: ColumnKey) => {
     if (sortColumn !== column) {
@@ -364,6 +419,16 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
       {showSelectMode && (
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
+            {sortedEntries.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={toggleSelectAll}
+                title={allSelected ? "Deselect all" : "Select all"}
+              >
+                {allSelected ? "Deselect all" : "Select all"}
+              </Button>
+            )}
             <Button
               variant="outline"
               size="sm"
@@ -457,13 +522,14 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                         "Watching": "secondary",
                         "On Hold": "outline",
                         "Dropped": "destructive",
-                        "Plan to Watch": "outline",
-                      } as const;
-                      return (
-                        <Badge
-                          variant={variants[entry.status as keyof typeof variants] || "outline"}
-                          className="text-[10px] px-1.5 py-0"
-                        >
+                            "Plan to Watch": "outline",
+                            "Planned": "outline",
+                          } as const;
+                          return (
+                            <Badge
+                              variant={variants[entry.status as keyof typeof variants] || "outline"}
+                              className="text-[10px] px-1.5 py-0"
+                            >
                           {entry.status || "N/A"}
                         </Badge>
                       );
@@ -486,7 +552,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
         ))}
         {sortedEntries.length === 0 && (
           <div className="col-span-2 text-center py-8 text-muted-foreground">
-            No entries found. Add your first media entry!
+            No entries in this view.
           </div>
         )}
       </div>
@@ -512,6 +578,12 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                     )}
                   </button>
                 </TableHead>
+              )}
+              {diaryDateField && (
+                <>
+                  <TableHead className="w-[120px] text-muted-foreground uppercase text-xs">Month</TableHead>
+                  <TableHead className="w-[60px] text-muted-foreground uppercase text-xs">Day</TableHead>
+                </>
               )}
               {visibleColumns.has("poster") && (
                 <TableHead className="w-[80px]">Poster</TableHead>
@@ -707,14 +779,14 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
             </TableRow>
           </TableHeader>
           <TableBody>
-            {sortedEntries.length === 0 ? (
+            {tableRowsData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={visibleColumnCount + (showSelectMode ? 2 : 1)} className="text-center py-8 text-muted-foreground">
-                  No entries found. Add your first media entry!
+                <TableCell colSpan={visibleColumnCount + (showSelectMode ? 2 : 1) + (diaryDateField ? 2 : 0)} className="text-center py-8 text-muted-foreground">
+                  No entries in this view.
                 </TableCell>
               </TableRow>
             ) : (
-              sortedEntries.map((entry) => (
+              tableRowsData.map(({ entry, monthLabel, groupLength }) => (
                 <TableRow
                   key={entry.id}
                   className={`cursor-pointer hover:bg-muted/50 ${showSelectMode && selectedEntries.has(entry.id) ? "bg-muted/50" : ""}`}
@@ -736,6 +808,23 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                           <Square className="h-4 w-4" />
                         )}
                       </button>
+                    </TableCell>
+                  )}
+                  {diaryDateField && monthLabel !== null && (
+                    <TableCell
+                      rowSpan={groupLength}
+                      className="align-top py-3 pr-2 border-r"
+                      style={{ verticalAlign: "top" }}
+                    >
+                      <div className="flex items-center gap-2 text-muted-foreground">
+                        <Calendar className="h-5 w-5 flex-shrink-0" />
+                        <span className="font-medium text-foreground text-sm">{monthLabel}</span>
+                      </div>
+                    </TableCell>
+                  )}
+                  {diaryDateField && (
+                    <TableCell className="py-3 font-mono text-sm tabular-nums">
+                      {getDay(entry.finish_date)}
                     </TableCell>
                   )}
                   {visibleColumns.has("poster") && (
@@ -775,6 +864,7 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
                             "On Hold": "outline",
                             "Dropped": "destructive",
                             "Plan to Watch": "outline",
+                            "Planned": "outline",
                           } as const;
 
                           return (

@@ -1,16 +1,21 @@
 "use client"
 
-import { useState, Suspense, useEffect } from "react"
+import { useState, Suspense, useEffect, useMemo } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { MediaEntry } from "@/lib/database.types"
-import { defaultFilterState } from "@/lib/filter-types"
-import { MediaTable } from "@/components/media-table"
+import { applyFilters } from "@/lib/filter-types"
+import { MediaTable, COLUMN_DEFINITIONS, ColumnKey } from "@/components/media-table"
+import { Input } from "@/components/ui/input"
 import { GlobalFilterBar } from "@/components/analytics/GlobalFilterBar"
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle, Table2, Search, X, Columns, CheckSquare, ChevronDown, ChevronRight } from "lucide-react"
+import { Loader2, AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Search, X, Columns, CheckSquare } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
-import { Input } from "@/components/ui/input"
+import { MediaTableSkeleton } from "@/components/skeletons"
+import { Skeleton } from "@/components/ui/skeleton"
+import { useMediaEntries } from "@/hooks/useMediaEntries"
+import { useMovieFilters } from "@/hooks/useMovieFilters"
+import { WatchingSection } from "@/components/movies/WatchingSection"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -19,13 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { COLUMN_DEFINITIONS, ColumnKey } from "@/components/media-table"
-import { MediaTableSkeleton } from "@/components/skeletons"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useColumnPreferences } from "@/hooks/useColumnPreferences"
-import { useMediaEntries } from "@/hooks/useMediaEntries"
-import { useMovieFilters } from "@/hooks/useMovieFilters"
-import { WatchingSection } from "@/components/movies/WatchingSection"
 
 function EntriesPageContent() {
   const router = useRouter()
@@ -34,6 +33,9 @@ function EntriesPageContent() {
   const {
     allEntries,
     watchingEntries,
+    watchedEntries,
+    plannedEntries,
+    holdAndDroppedEntries,
     loading,
     initialLoading,
     watchingLoading,
@@ -44,19 +46,37 @@ function EntriesPageContent() {
     handleDelete
   } = useMediaEntries()
 
-  // Use the new hook for filtering logic
   const {
     filters,
     setFilters,
     searchQuery,
     setSearchQuery,
-    filterOptions,
-    filteredEntries
+    filterOptions
   } = useMovieFilters(allEntries)
 
+  const filteredWatched = useMemo(() => {
+    const withFilters = applyFilters(watchedEntries, filters)
+    if (!searchQuery.trim()) return withFilters
+    const q = searchQuery.toLowerCase().trim()
+    return withFilters.filter((entry) => {
+      if (entry.title?.toLowerCase().includes(q)) return true
+      if (entry.genre && Array.isArray(entry.genre) && entry.genre.some((g) => String(g).toLowerCase().includes(q))) return true
+      if (entry.platform?.toLowerCase().includes(q)) return true
+      if (entry.type?.toLowerCase().includes(q)) return true
+      if (entry.medium?.toLowerCase().includes(q)) return true
+      if (entry.language && Array.isArray(entry.language) && entry.language.some((l) => String(l).toLowerCase().includes(q))) return true
+      if (entry.status?.toLowerCase().includes(q)) return true
+      if (entry.season?.toLowerCase().includes(q)) return true
+      return false
+    })
+  }, [watchedEntries, filters, searchQuery])
+
+  const { visibleColumns, toggleColumn } = useColumnPreferences()
+
   const [showSelectMode, setShowSelectMode] = useState(false)
-  const [entriesCollapsed, setEntriesCollapsed] = useState(false)
-  const { visibleColumns, setVisibleColumns, toggleColumn } = useColumnPreferences()
+  const [watchedCollapsed, setWatchedCollapsed] = useState(false)
+  const [plannedCollapsed, setPlannedCollapsed] = useState(false)
+  const [holdDroppedCollapsed, setHoldDroppedCollapsed] = useState(false)
 
   // Refetch and clear URL when landing after add (redirect with ?refreshed=1)
   useEffect(() => {
@@ -77,7 +97,7 @@ function EntriesPageContent() {
   if (initialLoading) {
     return (
       <div className="min-h-screen bg-background relative page-content">
-        <PageHeader title="All Entries" onMediaAdded={refreshEntries} />
+        <PageHeader title="Diary" onMediaAdded={refreshEntries} />
         <main className="p-4 sm:p-6 relative">
           <div className="mb-6 space-y-4">
             <div className="flex items-center gap-2">
@@ -115,18 +135,7 @@ function EntriesPageContent() {
       )}
 
       {/* Header */}
-      <PageHeader title="All Entries" onMediaAdded={refreshEntries} />
-
-      {/* Global Filter Bar */}
-      {allEntries.length > 0 && (
-        <GlobalFilterBar
-          filters={filters}
-          onFiltersChange={setFilters}
-          options={filterOptions}
-          totalCount={allEntries.length}
-          filteredCount={filteredEntries.length}
-        />
-      )}
+      <PageHeader title="Diary" onMediaAdded={refreshEntries} />
 
       {/* Main Content */}
       <main className="p-4 sm:p-6 relative">
@@ -137,126 +146,191 @@ function EntriesPageContent() {
           onDelete={handleDelete}
         />
 
-        {/* All Entries Header */}
-        <button
-          type="button"
-          className="flex items-center gap-2 mb-4 hover:opacity-80 transition-opacity"
-          onClick={() => setEntriesCollapsed(!entriesCollapsed)}
-        >
-          {entriesCollapsed ? (
-            <ChevronRight className="h-5 w-5 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-muted-foreground" />
-          )}
-          <Table2 className="h-5 w-5 text-primary" />
-          <h2 className="text-lg font-semibold">All Entries</h2>
-          {filteredEntries.length > 0 && (
-            <span className="text-sm text-muted-foreground">({filteredEntries.length})</span>
-          )}
-        </button>
-
-        {!entriesCollapsed && (
-          <>
-            <div className="mb-6 space-y-4">
-              {/* Search Bar and Column Picker */}
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="relative flex-1 min-w-[150px]">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    type="text"
-                    placeholder="Search..."
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value)
-                    }}
-                    onKeyDown={(e) => {
-                      // Prevent form submission on Enter key
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        e.stopPropagation()
-                      }
-                    }}
-                    className="pl-10 pr-10"
-                  />
-                  {searchQuery && (
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1/2 transform -translate-y-1/2 h-7 w-7"
-                      onClick={() => setSearchQuery("")}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  )}
-                </div>
-                <Button
-                  variant={showSelectMode ? "secondary" : "outline"}
-                  size="sm"
-                  className="gap-2"
-                  onClick={() => setShowSelectMode(!showSelectMode)}
-                >
-                  <CheckSquare className="h-4 w-4" />
-                  <span className="hidden sm:inline">{showSelectMode ? "Cancel Selection" : "Select"}</span>
-                </Button>
-                {/* Column picker hidden on mobile since we use card view */}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-2 hidden sm:flex">
-                      <Columns className="h-4 w-4" />
-                      Columns
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    {Object.entries(COLUMN_DEFINITIONS).map(([key, def]) => (
-                      <DropdownMenuCheckboxItem
-                        key={key}
-                        checked={visibleColumns.has(key as ColumnKey)}
-                        onCheckedChange={() => toggleColumn(key as ColumnKey)}
-                      >
-                        {def.label}
-                      </DropdownMenuCheckboxItem>
-                    ))}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
+        {allEntries.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <Calendar className="h-12 w-12 opacity-30 mb-4" />
+            <p className="text-sm font-mono mb-3">No entries yet</p>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button asChild>
+                <Link href="/movies/add">Add your first entry</Link>
+              </Button>
+              <Button variant="outline" asChild>
+                <Link href="/import">Import CSV</Link>
+              </Button>
             </div>
+          </div>
+        ) : (
+          <>
+            {/* Watched (Diary) */}
+            <section className="mb-8">
+              <button
+                type="button"
+                className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
+                onClick={() => setWatchedCollapsed(!watchedCollapsed)}
+              >
+                {watchedCollapsed ? (
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+                <Calendar className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold">Watched</h2>
+                {watchedEntries.length > 0 && (
+                  <span className="text-sm text-muted-foreground">
+                    ({filteredWatched.length !== watchedEntries.length ? `${filteredWatched.length} of ${watchedEntries.length}` : watchedEntries.length})
+                  </span>
+                )}
+              </button>
+              {!watchedCollapsed && (
+                <>
+                  {watchedEntries.length > 0 && (
+                    <>
+                      <GlobalFilterBar
+                        filters={filters}
+                        onFiltersChange={setFilters}
+                        options={filterOptions}
+                        totalCount={watchedEntries.length}
+                        filteredCount={filteredWatched.length}
+                      />
+                      <div className="mb-6 mt-4 space-y-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="relative flex-1 min-w-[150px]">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                            <Input
+                              type="text"
+                              placeholder="Search..."
+                              value={searchQuery}
+                              onChange={(e) => setSearchQuery(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  e.preventDefault()
+                                  e.stopPropagation()
+                                }
+                              }}
+                              className="pl-10 pr-10"
+                            />
+                            {searchQuery && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7"
+                                onClick={() => setSearchQuery("")}
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </div>
+                          <Button
+                            variant={showSelectMode ? "secondary" : "outline"}
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => setShowSelectMode(!showSelectMode)}
+                          >
+                            <CheckSquare className="h-4 w-4" />
+                            <span className="hidden sm:inline">{showSelectMode ? "Cancel Selection" : "Select"}</span>
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="outline" size="sm" className="gap-2 hidden sm:flex">
+                                <Columns className="h-4 w-4" />
+                                Columns
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-56">
+                              <DropdownMenuLabel>Toggle Columns</DropdownMenuLabel>
+                              <DropdownMenuSeparator />
+                              {Object.entries(COLUMN_DEFINITIONS).map(([key, def]) => (
+                                <DropdownMenuCheckboxItem
+                                  key={key}
+                                  checked={visibleColumns.has(key as ColumnKey)}
+                                  onCheckedChange={() => toggleColumn(key as ColumnKey)}
+                                >
+                                  {def.label}
+                                </DropdownMenuCheckboxItem>
+                              ))}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                  <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
+                    <MediaTable
+                      entries={filteredWatched}
+                      onEdit={handleEdit}
+                      onDelete={handleDelete}
+                      onEntryUpdate={updateEntryInList}
+                      onRefresh={refreshEntries}
+                      showSelectMode={showSelectMode}
+                      onSelectModeChange={setShowSelectMode}
+                      diaryDateField="finish_date"
+                    />
+                  </div>
+                </>
+              )}
+            </section>
 
-            {allEntries.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <Table2 className="h-12 w-12 opacity-30 mb-4" />
-                <p className="text-sm font-mono mb-3">No entries yet</p>
-                <div className="flex flex-wrap items-center justify-center gap-2">
-                  <Button asChild>
-                    <Link href="/movies/add">Add your first entry</Link>
-                  </Button>
-                  <Button variant="outline" asChild>
-                    <Link href="/import">Import CSV</Link>
-                  </Button>
+            {/* Planned */}
+            <section className="mb-8">
+              <button
+                type="button"
+                className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
+                onClick={() => setPlannedCollapsed(!plannedCollapsed)}
+              >
+                {plannedCollapsed ? (
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+                <ListTodo className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold">Planned</h2>
+                {plannedEntries.length > 0 && (
+                  <span className="text-sm text-muted-foreground">({plannedEntries.length})</span>
+                )}
+              </button>
+              {!plannedCollapsed && (
+                <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
+                  <MediaTable
+                    entries={plannedEntries}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onEntryUpdate={updateEntryInList}
+                    onRefresh={refreshEntries}
+                  />
                 </div>
-              </div>
-            ) : filteredEntries.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
-                <Table2 className="h-12 w-12 opacity-30 mb-4" />
-                <p className="text-sm font-mono mb-3">No entries match the current filters</p>
-                <Button variant="outline" onClick={() => setFilters(defaultFilterState)}>
-                  Clear Filters
-                </Button>
-              </div>
-            ) : (
-              <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
-                <MediaTable
-                  entries={filteredEntries}
-                  onEdit={handleEdit}
-                  onDelete={handleDelete}
-                  showSelectMode={showSelectMode}
-                  onSelectModeChange={setShowSelectMode}
-                  onEntryUpdate={updateEntryInList}
-                  onRefresh={refreshEntries}
-                />
-              </div>
-            )}
+              )}
+            </section>
+
+            {/* On Hold & Dropped */}
+            <section>
+              <button
+                type="button"
+                className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
+                onClick={() => setHoldDroppedCollapsed(!holdDroppedCollapsed)}
+              >
+                {holdDroppedCollapsed ? (
+                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                ) : (
+                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                )}
+                <Pause className="h-5 w-5 text-primary" />
+                <h2 className="text-lg font-semibold">On Hold & Dropped</h2>
+                {holdAndDroppedEntries.length > 0 && (
+                  <span className="text-sm text-muted-foreground">({holdAndDroppedEntries.length})</span>
+                )}
+              </button>
+              {!holdDroppedCollapsed && (
+                <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
+                  <MediaTable
+                    entries={holdAndDroppedEntries}
+                    onEdit={handleEdit}
+                    onDelete={handleDelete}
+                    onEntryUpdate={updateEntryInList}
+                    onRefresh={refreshEntries}
+                  />
+                </div>
+              )}
+            </section>
           </>
         )}
       </main>
@@ -268,7 +342,7 @@ export default function EntriesPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-background relative page-content">
-        <PageHeader title="All Entries" />
+        <PageHeader title="Diary" />
         <main className="p-4 sm:p-6 relative">
           <div className="mb-6 space-y-4">
             <Skeleton className="h-10 w-full" />

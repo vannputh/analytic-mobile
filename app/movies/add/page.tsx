@@ -133,6 +133,7 @@ function AddPageContent() {
             imdbId={formData.imdb_id || null}
             detectISBN={detectISBN}
             detectIMDbID={detectIMDbID}
+            autoFocus={!entryId}
           />
 
           <ClassificationSection
@@ -208,7 +209,7 @@ function AddPageContent() {
             <Button
                 type="button"
                 variant="ghost"
-                onClick={() => router.push(returnTo ? decodeURIComponent(returnTo) : "/movies/analytics")}
+                onClick={() => router.push(returnTo ? decodeURIComponent(returnTo) : "/movies")}
                 disabled={loading}
               >
                 Cancel

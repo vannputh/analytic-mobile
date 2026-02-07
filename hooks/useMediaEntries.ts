@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { toast } from "sonner"
 import { getEntries, deleteEntry } from "@/lib/actions"
 import { MediaEntry } from "@/lib/database.types"
@@ -118,9 +118,39 @@ export function useMediaEntries() {
         }
     }
 
+    const watchedEntries = useMemo(() => {
+        return allEntries
+            .filter((e) => e.status === "Finished")
+            .sort((a, b) => {
+                const aTime = a.finish_date ? new Date(a.finish_date).getTime() : 0
+                const bTime = b.finish_date ? new Date(b.finish_date).getTime() : 0
+                return bTime - aTime
+            })
+    }, [allEntries])
+
+    const plannedEntries = useMemo(
+        () =>
+            allEntries.filter(
+                (e) =>
+                    e.status === "Plan to Watch" || e.status === "Planned"
+            ),
+        [allEntries]
+    )
+
+    const holdAndDroppedEntries = useMemo(
+        () =>
+            allEntries.filter(
+                (e) => e.status === "On Hold" || e.status === "Dropped"
+            ),
+        [allEntries]
+    )
+
     return {
         allEntries,
         watchingEntries,
+        watchedEntries,
+        plannedEntries,
+        holdAndDroppedEntries,
         loading,
         initialLoading,
         watchingLoading,

@@ -119,7 +119,7 @@ export function GlobalFilterBar({
               onClick={() => onFiltersChange(defaultFilterState)}
             >
               <RotateCcw className="h-3 w-3 mr-1" />
-              Reset
+              Clear Filters
             </Button>
           </>
         )}

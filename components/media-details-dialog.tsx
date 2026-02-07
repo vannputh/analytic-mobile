@@ -127,6 +127,8 @@ export function MediaDetailsDialog({
     const [fetchingSource, setFetchingSource] = useState<"omdb" | "tmdb" | null>(null);
 
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const initialFormDataRef = useRef<string | null>(null);
+    const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
 
     // --- Effects ---
 
@@ -168,7 +170,7 @@ export function MediaDetailsDialog({
                 }
                 initialLanguage = normalizeLanguage(initialLanguage);
 
-                setFormData({
+                const initial = {
                     title: entry.title,
                     status: entry.status,
                     episodes: entry.episodes,
@@ -189,7 +191,9 @@ export function MediaDetailsDialog({
                     time_taken: entry.time_taken,
                     average_rating: entry.average_rating,
                     price: entry.price,
-                });
+                };
+                setFormData(initial);
+                initialFormDataRef.current = JSON.stringify(initial);
                 setActiveTab("general");
                 loadStatusHistory(entry.id);
                 // Load episode history
@@ -208,13 +212,15 @@ export function MediaDetailsDialog({
                 setNewEpisodeNumber((entry.episodes_watched || 0) + 1);
             } else {
                 // New entry - initialize with defaults
-                setFormData({
+                const initial = {
                     title: "",
                     status: "Watching",
                     medium: "Movie",
                     episodes_watched: 0,
                     start_date: new Date().toISOString().split("T")[0],
-                });
+                };
+                setFormData(initial);
+                initialFormDataRef.current = JSON.stringify(initial);
                 setActiveTab("general");
                 setEpisodeHistory([]);
                 setStatusHistory([]);
@@ -285,7 +291,7 @@ export function MediaDetailsDialog({
                 finish_date: formData.finish_date,
                 poster_url: formData.poster_url,
                 time_taken: formData.time_taken,
-                price: formData.price,
+                price: formData.price ?? 0,
                 average_rating: formData.average_rating,
             };
 
@@ -295,6 +301,7 @@ export function MediaDetailsDialog({
                 if (result.success) {
                     toast.success("Entry updated");
                     onSuccess?.(result.data);
+                    initialFormDataRef.current = null;
                     onOpenChange(false);
                 } else {
                     toast.error(result.error);
@@ -305,6 +312,7 @@ export function MediaDetailsDialog({
                 if (result.success) {
                     toast.success("Entry created");
                     onSuccess?.(result.data);
+                    initialFormDataRef.current = null;
                     onOpenChange(false);
                 } else {
                     toast.error(result.error);
@@ -321,6 +329,7 @@ export function MediaDetailsDialog({
     const handleDelete = () => {
         if (onDelete && entry) {
             onDelete(entry.id);
+            initialFormDataRef.current = null;
             onOpenChange(false);
         }
     };
@@ -554,12 +563,33 @@ export function MediaDetailsDialog({
         }
     };
 
+    const handleOpenChange = (newOpen: boolean) => {
+        if (!newOpen) {
+            const isDirty =
+                initialFormDataRef.current !== null &&
+                JSON.stringify(formData) !== initialFormDataRef.current;
+            if (isDirty) {
+                setShowDiscardConfirm(true);
+                return;
+            }
+            initialFormDataRef.current = null;
+        }
+        onOpenChange(newOpen);
+    };
+
+    const handleConfirmDiscard = () => {
+        setShowDiscardConfirm(false);
+        initialFormDataRef.current = null;
+        onOpenChange(false);
+    };
+
     // --- Render Helpers ---
 
     const isNewEntry = !entry;
 
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
+        <>
+        <Dialog open={open} onOpenChange={handleOpenChange}>
             <DialogContent className="max-w-4xl p-0 h-[90vh] md:h-[85vh] flex flex-col gap-0 overflow-hidden">
                 {/* Mobile Header - visible on small screens */}
                 <div className="md:hidden border-b bg-muted/30 p-3">
@@ -936,7 +966,7 @@ export function MediaDetailsDialog({
                                         className="text-muted-foreground"
                                         onClick={() => {
                                             const returnTo = encodeURIComponent((pathname || "/movies") + (typeof window !== "undefined" ? window.location.search : ""));
-                                            onOpenChange(false);
+                                            handleOpenChange(false);
                                             router.push(`/movies/add?id=${entry.id}&returnTo=${returnTo}`);
                                         }}
                                     >
@@ -945,7 +975,7 @@ export function MediaDetailsDialog({
                                 )}
                             </div>
                             <div className="flex gap-2">
-                                <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+                                <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
                                 <Button onClick={handleSave} disabled={loading}>
                                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                                     Save Changes
@@ -956,5 +986,25 @@ export function MediaDetailsDialog({
                 </div>
             </DialogContent >
         </Dialog >
+
+        <Dialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>Unsaved changes</DialogTitle>
+                    <DialogDescription>
+                        You have unsaved changes. Discard them?
+                    </DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <Button variant="outline" onClick={() => setShowDiscardConfirm(false)}>
+                        Keep editing
+                    </Button>
+                    <Button variant="destructive" onClick={handleConfirmDiscard}>
+                        Discard
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+        </>
     );
 }
