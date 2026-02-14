@@ -7,14 +7,8 @@ import { useRouter, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ThemeToggle } from "@/components/ui/theme-toggle"
 import { createClient } from "@/lib/supabase/client"
-import { Table2, BarChart3, Plus, LogOut, Film, Utensils, ChevronDown, Check, Calendar } from "lucide-react"
+import { Plus, LogOut, Film, Utensils } from "lucide-react"
 import { toast } from "sonner"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 // Dynamic imports for dialog components - reduces initial bundle size
 const MediaDetailsDialog = dynamic(
@@ -27,7 +21,7 @@ const FoodAddDialog = dynamic(
 )
 
 const WORKSPACES = {
-  movies: { label: "Movies & TV", icon: Film, path: "/movies" },
+  movies: { label: "Media", icon: Film, path: "/movies" },
   food: { label: "Food & Drinks", icon: Utensils, path: "/food" },
 } as const
 
@@ -55,6 +49,9 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
   const currentWorkspace = WORKSPACES[currentWorkspaceKey]
   const CurrentIcon = currentWorkspace.icon
 
+  const isDiaryPage = pathname === currentWorkspace.path
+  const isAnalyticsPage = pathname === `${currentWorkspace.path}/analytics`
+
   const handleLogout = async () => {
     const supabaseClient = createClient()
     const { error } = await supabaseClient.auth.signOut()
@@ -71,94 +68,74 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
       <div className="flex items-center justify-between px-2 sm:px-4 py-2 sm:py-3">
         {/* Left side: Workspace Switcher + Title */}
         <div className="flex items-center gap-2 sm:gap-3">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="gap-1.5 px-2 sm:px-3">
-                <CurrentIcon className="h-4 w-4" />
-                <span className="hidden sm:inline text-xs font-medium">{currentWorkspace.label}</span>
-                <ChevronDown className="h-3 w-3 opacity-50" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-[160px]">
-              {Object.entries(WORKSPACES).map(([key, ws]) => (
-                <DropdownMenuItem
-                  key={key}
-                  onClick={() => router.push(`${ws.path}/analytics`)}
-                  className="gap-2"
-                >
-                  <ws.icon className="h-4 w-4" />
-                  {ws.label}
-                  {currentWorkspaceKey === key && <Check className="ml-auto h-3 w-3" />}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              const targetWorkspace = currentWorkspaceKey === "movies" ? "food" : "movies"
+              router.push(`${WORKSPACES[targetWorkspace].path}/analytics`)
+            }}
+            className="h-8 w-8"
+          >
+            <CurrentIcon className="h-4 w-4" />
+            <span className="sr-only">{currentWorkspace.label}</span>
+          </Button>
           <span className="text-muted-foreground">/</span>
-          <h1 className="text-xs sm:text-sm font-mono uppercase tracking-wider">{title}</h1>
+          {isDiaryPage ? (
+            <Link
+              href={`${currentWorkspace.path}/analytics`}
+              className="text-xs sm:text-sm font-mono uppercase tracking-wider hover:underline"
+            >
+              diary
+            </Link>
+          ) : isAnalyticsPage ? (
+            <Link
+              href={currentWorkspace.path}
+              className="text-xs sm:text-sm font-mono uppercase tracking-wider hover:underline"
+            >
+              analytics
+            </Link>
+          ) : (
+            <h1 className="text-xs sm:text-sm font-mono uppercase tracking-wider">{title}</h1>
+          )}
         </div>
 
         {/* Right side: Navigation buttons */}
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto">
-          <Button
-            variant={pathname?.includes("/analytics") ? "default" : "outline"}
-            size="sm"
-            asChild
-            className="px-2 sm:px-3"
-          >
-            <Link href={`${currentWorkspace.path}/analytics`}>
-              <BarChart3 className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Analytics</span>
-            </Link>
-          </Button>
-          <Button
-            variant={pathname === currentWorkspace.path ? "default" : "outline"}
-            size="sm"
-            asChild
-            className="px-2 sm:px-3"
-          >
-            <Link href={currentWorkspace.path}>
-              {currentWorkspaceKey === "food" ? (
-                <Calendar className="h-4 w-4 sm:mr-1.5" />
-              ) : (
-                <Table2 className="h-4 w-4 sm:mr-1.5" />
-              )}
-              <span className="hidden sm:inline">{currentWorkspaceKey === "food" ? "Calendar" : "Entries"}</span>
-            </Link>
-          </Button>
-
           {/* Add Button Logic */}
           {currentWorkspaceKey === "movies" && (
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
               onClick={() => setShowMediaDialog(true)}
-              className="px-2 sm:px-3"
+              className="h-8 w-8"
             >
-              <Plus className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Add</span>
+              <Plus className="h-4 w-4" />
+              <span className="sr-only">Add</span>
             </Button>
           )}
 
           {currentWorkspaceKey === "food" && (
             <Button
-              variant="outline"
-              size="sm"
+              variant="ghost"
+              size="icon"
               onClick={() => (openFoodAddDialog ? openFoodAddDialog() : setShowFoodDialog(true))}
-              className="px-2 sm:px-3"
+              className="h-8 w-8"
             >
-              <Plus className="h-4 w-4 sm:mr-1.5" />
-              <span className="hidden sm:inline">Add</span>
+              <Plus className="h-4 w-4" />
+              <span className="sr-only">Add</span>
             </Button>
           )}
 
           <ThemeToggle />
           <Button
             variant="ghost"
-            size="sm"
+            size="icon"
             onClick={handleLogout}
-            className="p-2"
+            className="h-8 w-8"
           >
             <LogOut className="h-4 w-4" />
+            <span className="sr-only">Logout</span>
           </Button>
         </div>
       </div>
