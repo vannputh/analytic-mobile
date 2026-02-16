@@ -3,7 +3,7 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Mail, Loader2 } from "lucide-react"
+import { KeyRound, Loader2 } from "lucide-react"
 
 interface LoginFormProps {
     email: string
@@ -35,8 +35,8 @@ export function LoginForm({ email, onEmailChange, onSubmit, loading }: LoginForm
                     </>
                 ) : (
                     <>
-                        <Mail className="mr-2 h-4 w-4" />
-                        Send Magic Link
+                        <KeyRound className="mr-2 h-4 w-4" />
+                        Send OTP
                     </>
                 )}
             </Button>

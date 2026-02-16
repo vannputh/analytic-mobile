@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { GoogleGenerativeAI } from "@google/generative-ai"
 import { createClient } from "@/lib/supabase/server"
-import { buildSystemPrompt, WorkspaceType } from "@/lib/ai-query-schemas"
+import { buildSystemPrompt, buildActionPrompt, shouldUseActionMode, WorkspaceType } from "@/lib/ai-query-schemas"
 import { normalizeGeminiError } from "@/lib/gemini-errors"
 
 export interface AIQueryRequest {
@@ -9,8 +9,30 @@ export interface AIQueryRequest {
   workspace: WorkspaceType
 }
 
+export interface MediaAction {
+  type: "create" | "update" | "delete"
+  id?: string // Required for update/delete
+  data?: Partial<{
+    title: string
+    medium: string
+    type: string
+    status: string
+    genre: string[]
+    platform: string
+    my_rating: number
+    start_date: string
+    finish_date: string
+    language: string[]
+    episodes: number
+    episodes_watched: number
+    price: number
+  }>
+}
+
 export interface AIQueryResponse {
   success: boolean
+  type?: "query" | "action"
+  // Query mode fields
   sql?: string
   explanation?: string
   data?: any[]
@@ -21,6 +43,9 @@ export interface AIQueryResponse {
     columns: string[]
     columnTypes: Record<string, string>
   }
+  // Action mode fields
+  intent?: string
+  actions?: MediaAction[]
   error?: string
 }
 
@@ -172,12 +197,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Generate SQL using Gemini
+    // Determine if this is an action request or query request
+    const isActionMode = shouldUseActionMode(body.query)
+
+    // Generate response using Gemini
     const genAI = new GoogleGenerativeAI(apiKey)
-    const systemPrompt = buildSystemPrompt(body.workspace)
+    const systemPrompt = isActionMode 
+      ? buildActionPrompt(body.workspace)
+      : buildSystemPrompt(body.workspace)
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-3-flash-preview",
       systemInstruction: systemPrompt,
     })
 
@@ -226,7 +256,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    let parsed: { sql: string; explanation: string }
+    let parsed: any
     try {
       parsed = JSON.parse(jsonString)
     } catch (parseError) {
@@ -240,6 +270,27 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Handle action mode response
+    if (isActionMode || parsed.type === "action") {
+      if (!parsed.actions || !Array.isArray(parsed.actions)) {
+        return NextResponse.json(
+          {
+            success: false,
+            error: "Invalid action response structure. Please try rephrasing your request.",
+          },
+          { status: 500 }
+        )
+      }
+
+      return NextResponse.json({
+        success: true,
+        type: "action",
+        intent: parsed.intent || "Perform actions",
+        actions: parsed.actions,
+      })
+    }
+
+    // Handle query mode response
     if (!parsed.sql || !parsed.explanation) {
       return NextResponse.json(
         {
@@ -293,6 +344,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      type: "query",
       sql: parsed.sql,
       explanation: parsed.explanation,
       data: resultData,

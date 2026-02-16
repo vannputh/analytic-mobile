@@ -129,7 +129,7 @@ export function PageHeader({ title, openFoodAddDialog, onMediaAdded }: PageHeade
             className="h-8 w-8"
           >
             <Sparkles className="h-4 w-4" />
-            <span className="sr-only">AI Analysis</span>
+            <span className="sr-only">AI Assistant</span>
           </Button>
 
           {/* Add Button Logic */}

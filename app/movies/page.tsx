@@ -8,7 +8,7 @@ import { MediaTable, COLUMN_DEFINITIONS, ColumnKey } from "@/components/media-ta
 import { Input } from "@/components/ui/input"
 import { GlobalFilterBar } from "@/components/analytics/GlobalFilterBar"
 import { Button } from "@/components/ui/button"
-import { Loader2, AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Search, X, Columns, CheckSquare } from "lucide-react"
+import { Loader2, AlertCircle, Calendar, ListTodo, Pause, ChevronDown, ChevronRight, Search, X, Columns, CheckSquare, Shuffle } from "lucide-react"
 import { PageHeader } from "@/components/page-header"
 import { MediaTableSkeleton } from "@/components/skeletons"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { useColumnPreferences } from "@/hooks/useColumnPreferences"
+import { WatchThisDialog } from "@/components/watch-this-dialog"
 
 function EntriesPageContent() {
   const router = useRouter()
@@ -76,6 +77,15 @@ function EntriesPageContent() {
   const [watchedCollapsed, setWatchedCollapsed] = useState(false)
   const [plannedCollapsed, setPlannedCollapsed] = useState(false)
   const [holdDroppedCollapsed, setHoldDroppedCollapsed] = useState(false)
+  const [entryToOpenId, setEntryToOpenId] = useState<string | null>(null)
+  const [watchThisEntry, setWatchThisEntry] = useState<MediaEntry | null>(null)
+
+  const handlePickRandomPlanned = () => {
+    if (plannedEntries.length === 0) return
+    setPlannedCollapsed(false)
+    const random = plannedEntries[Math.floor(Math.random() * plannedEntries.length)]
+    if (random) setWatchThisEntry(random)
+  }
 
   // Refetch and clear URL when landing after add (redirect with ?refreshed=1)
   useEffect(() => {
@@ -256,22 +266,35 @@ function EntriesPageContent() {
 
             {/* Planned */}
             <section className="mb-8">
-              <button
-                type="button"
-                className="flex items-center gap-2 mb-3 hover:opacity-80 transition-opacity"
-                onClick={() => setPlannedCollapsed(!plannedCollapsed)}
-              >
-                {plannedCollapsed ? (
-                  <ChevronRight className="h-5 w-5 text-muted-foreground" />
-                ) : (
-                  <ChevronDown className="h-5 w-5 text-muted-foreground" />
-                )}
-                <ListTodo className="h-5 w-5 text-primary" />
-                <h2 className="text-lg font-semibold">Planned</h2>
+              <div className="flex items-center gap-2 mb-3">
+                <button
+                  type="button"
+                  className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+                  onClick={() => setPlannedCollapsed(!plannedCollapsed)}
+                >
+                  {plannedCollapsed ? (
+                    <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  <ListTodo className="h-5 w-5 text-primary" />
+                  <h2 className="text-lg font-semibold">Planned</h2>
+                  {plannedEntries.length > 0 && (
+                    <span className="text-sm text-muted-foreground">({plannedEntries.length})</span>
+                  )}
+                </button>
                 {plannedEntries.length > 0 && (
-                  <span className="text-sm text-muted-foreground">({plannedEntries.length})</span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 shrink-0"
+                    onClick={handlePickRandomPlanned}
+                    title="Pick random to watch"
+                  >
+                    <Shuffle className="h-4 w-4" />
+                  </Button>
                 )}
-              </button>
+              </div>
               {!plannedCollapsed && (
                 <div className="transition-opacity duration-200" style={{ opacity: loading ? 0.5 : 1 }}>
                   <MediaTable
@@ -279,10 +302,22 @@ function EntriesPageContent() {
                     onDelete={handleDelete}
                     onEntryUpdate={updateEntryInList}
                     onRefresh={refreshEntries}
+                    entryToOpenId={entryToOpenId}
+                    onOpenDetailsDone={() => setEntryToOpenId(null)}
                   />
                 </div>
               )}
             </section>
+
+            <WatchThisDialog
+              entry={watchThisEntry}
+              open={!!watchThisEntry}
+              onOpenChange={(open) => !open && setWatchThisEntry(null)}
+              onOpenInDiary={(entry) => {
+                setWatchThisEntry(null)
+                setEntryToOpenId(entry.id)
+              }}
+            />
 
             {/* On Hold & Dropped */}
             <section>

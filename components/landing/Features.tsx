@@ -1,74 +1,56 @@
 "use client"
 
-import { Film, BarChart3, Sparkles, UtensilsCrossed, Cloud, Zap } from "lucide-react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Film, Sparkles, UtensilsCrossed } from "lucide-react"
 
-const features = [
+const points = [
   {
     icon: Film,
-    title: "Media Tracking",
-    description: "Track movies, TV shows, books, games, podcasts, and live theatre with rich metadata",
-  },
-  {
-    icon: BarChart3,
-    title: "Analytics Dashboard",
-    description: "Visualize your consumption patterns with interactive charts and detailed KPIs",
-  },
-  {
-    icon: Sparkles,
-    title: "AI Queries",
-    description: "Ask natural language questions about your watch history and get instant insights",
+    title: "One place for everything",
+    body: "Log films, shows, books, games, and podcasts in a single, quiet timeline.",
   },
   {
     icon: UtensilsCrossed,
-    title: "Food Journal",
-    description: "Track restaurant visits, meals, and culinary experiences with ratings and photos",
+    title: "Moments, not metrics",
+    body: "Capture how something felt, not just when you finished it or what you rated it.",
   },
   {
-    icon: Cloud,
-    title: "Cloud Sync",
-    description: "Access your data anywhere with secure cloud storage and real-time synchronization",
-  },
-  {
-    icon: Zap,
-    title: "Fast & Efficient",
-    description: "Built with modern technologies for a blazing fast, responsive experience",
+    icon: Sparkles,
+    title: "Gentle AI help",
+    body: "Ask natural questions later—\"what comfort shows did I watch last winter?\"—without designing dashboards.",
   },
 ]
 
 export function Features() {
   return (
-    <section className="py-24 px-4 bg-muted/30">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16 space-y-4">
-          <h2 className="text-4xl md:text-5xl font-bold tracking-tight font-sans">
-            Everything you need
+    <section className="py-16 px-4">
+      <div className="max-w-3xl mx-auto space-y-8">
+        <div className="space-y-3 text-left">
+          <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+            Why media review
+          </p>
+          <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">
+            Minimal, on purpose
           </h2>
-          <p className="text-lg text-muted-foreground font-mono max-w-2xl mx-auto">
-            Powerful features to track, analyze, and remember all your media consumption
+          <p className="text-sm md:text-base text-muted-foreground">
+            No busy charts, no growth curves. Just a calm, opinionated surface for keeping
+            track of the media that actually matters to you.
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature) => {
-            const Icon = feature.icon
-            return (
-              <Card 
-                key={feature.title}
-                className="relative overflow-hidden transition-all hover:shadow-lg hover:scale-[1.02] duration-300"
-              >
-                <CardContent className="p-6 space-y-4">
-                  <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Icon className="h-6 w-6 text-primary" />
-                  </div>
-                  <h3 className="text-xl font-bold font-sans">{feature.title}</h3>
-                  <p className="text-sm text-muted-foreground font-mono leading-relaxed">
-                    {feature.description}
-                  </p>
-                </CardContent>
-              </Card>
-            )
-          })}
+        <div className="space-y-6">
+          {points.map((point) => (
+            <div key={point.title} className="flex gap-4">
+              <div className="mt-1 flex h-8 w-8 items-center justify-center rounded-full border bg-background">
+                <point.icon className="h-4 w-4 text-primary/80" />
+              </div>
+              <div className="space-y-1">
+                <h3 className="text-sm md:text-base font-medium">{point.title}</h3>
+                <p className="text-xs md:text-sm text-muted-foreground">
+                  {point.body}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </section>

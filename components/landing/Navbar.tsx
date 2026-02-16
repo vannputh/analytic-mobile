@@ -20,9 +20,11 @@ export function Navbar({ onRequestAccess, onLogin }: NavbarProps) {
           {/* Logo */}
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Film className="h-5 w-5 text-primary" />
+              <Film className="h-5 w-5 text-primary/80" />
             </div>
-            <span className="text-xl font-bold font-mono tracking-tight">analytics</span>
+            <span className="text-lg font-semibold tracking-tight">
+              media review
+            </span>
           </div>
 
           {/* Actions */}
@@ -38,16 +40,14 @@ export function Navbar({ onRequestAccess, onLogin }: NavbarProps) {
               <span className="sr-only">Toggle theme</span>
             </Button>
             
-            <Button 
-              variant="ghost" 
+            <Button
+              variant="ghost"
               onClick={onLogin}
-              className="font-mono text-xs uppercase tracking-wider"
             >
               Login
             </Button>
-            <Button 
+            <Button
               onClick={onRequestAccess}
-              className="font-mono text-xs uppercase tracking-wider"
             >
               Request Access
             </Button>

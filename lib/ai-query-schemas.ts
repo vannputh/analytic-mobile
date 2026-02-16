@@ -474,3 +474,131 @@ CRITICAL JSON REQUIREMENTS:
 
 IMPORTANT: Return ONLY the raw JSON object. No markdown formatting, no code blocks, no explanations before or after.`
 }
+
+export function buildActionPrompt(workspace: WorkspaceType): string {
+  const schema = getSchemaForWorkspace(workspace)
+  const tableName = schema.tableName
+
+  return `You are an AI assistant that helps users manage their ${workspace} tracking data. You can understand natural language requests to add, update, or delete entries.
+
+DATABASE SCHEMA:
+Table: ${tableName}
+${schema.description}
+
+Available fields for ${workspace} entries:
+${schema.columns
+  .filter(col => !['id', 'created_at', 'updated_at', 'user_id'].includes(col.name))
+  .map(col => `  - ${col.name} (${col.type}): ${col.description}${col.example ? ` | Example: ${col.example}` : ""}`)
+  .join('\n')}
+
+VALID STATUS VALUES: ${workspace === 'media' ? 'Finished, Watching, Currently Watching, On Hold, Dropped, Plan to Watch, Planned' : 'N/A'}
+VALID MEDIUM VALUES: ${workspace === 'media' ? 'Movie, TV Show, Book, Game, Podcast, Live Theatre' : 'N/A'}
+VALID PLATFORM VALUES: ${workspace === 'media' ? 'Netflix, Hulu, Disney+, Amazon Prime, HBO Max, Apple TV+, YouTube, Spotify, Audible, Steam, PlayStation, Xbox, Nintendo, Other' : 'N/A'}
+
+YOUR TASK:
+Analyze the user's request and determine what actions they want to perform. Return a JSON response with the intent and a list of actions.
+
+ACTION TYPES:
+1. CREATE - Add new entries to the database
+2. UPDATE - Modify existing entries (requires matching by title)
+3. DELETE - Remove entries (requires matching by title)
+
+EXAMPLE REQUESTS AND RESPONSES:
+
+Example 1: Adding to planned
+Request: "Add these films to planned: Dune Part 3, The Batman 2, Avatar 3"
+Response:
+{
+  "type": "action",
+  "intent": "Add films to planned watchlist",
+  "actions": [
+    {"type": "create", "data": {"title": "Dune Part 3", "status": "Planned", "medium": "Movie"}},
+    {"type": "create", "data": {"title": "The Batman 2", "status": "Planned", "medium": "Movie"}},
+    {"type": "create", "data": {"title": "Avatar 3", "status": "Planned", "medium": "Movie"}}
+  ]
+}
+
+Example 2: Updating status
+Request: "Mark Inception as finished with 9/10 rating"
+Response:
+{
+  "type": "action",
+  "intent": "Update Inception to finished status with rating",
+  "actions": [
+    {"type": "update", "data": {"title": "Inception", "status": "Finished", "my_rating": 9}}
+  ]
+}
+
+Example 3: Mixed operations
+Request: "Add Tenet to planned, and mark Interstellar as finished"
+Response:
+{
+  "type": "action",
+  "intent": "Add new film and update existing film",
+  "actions": [
+    {"type": "create", "data": {"title": "Tenet", "status": "Planned", "medium": "Movie"}},
+    {"type": "update", "data": {"title": "Interstellar", "status": "Finished"}}
+  ]
+}
+
+Example 4: Delete
+Request: "Delete The Room from my list"
+Response:
+{
+  "type": "action",
+  "intent": "Delete The Room entry",
+  "actions": [
+    {"type": "delete", "data": {"title": "The Room"}}
+  ]
+}
+
+RULES FOR ACTIONS:
+1. For CREATE actions:
+   - Always include "title" (required)
+   - Include "status" if mentioned or implied (e.g., "add to planned" = status "Planned")
+   - Include "medium" if known or can be inferred (default to "Movie" for films)
+   - Include other fields if mentioned (rating, genre, platform, etc.)
+
+2. For UPDATE actions:
+   - Always include "title" to identify the entry
+   - Include only the fields that should be changed
+   - Use exact status values: "Finished", "Watching", "Currently Watching", "On Hold", "Dropped", "Plan to Watch", "Planned"
+
+3. For DELETE actions:
+   - Only include "title" to identify what to delete
+
+4. Rating values should be numbers 0-10 (not strings)
+5. Dates should be in ISO format YYYY-MM-DD
+6. Genre and language should be arrays of strings
+7. For TV shows, include episodes info if mentioned
+
+OUTPUT FORMAT:
+Return ONLY a JSON object with this structure:
+{
+  "type": "action",
+  "intent": "brief description of what the user wants",
+  "actions": [
+    {"type": "create|update|delete", "data": {...}}
+  ]
+}
+
+CRITICAL:
+- Return ONLY valid JSON
+- No markdown code blocks, no explanations
+- Ensure all strings are properly quoted
+- Use exact field names from the schema
+- Return the complete JSON starting with { and ending with }`
+}
+
+export function shouldUseActionMode(query: string): boolean {
+  const actionKeywords = [
+    'add', 'create', 'new',
+    'update', 'change', 'modify', 'mark', 'set',
+    'delete', 'remove',
+    'to planned', 'to plan to watch', 'to watchlist',
+    'as finished', 'as watching', 'as dropped', 'as on hold'
+  ]
+  
+  const queryLower = query.toLowerCase()
+  return actionKeywords.some(keyword => queryLower.includes(keyword))
+}

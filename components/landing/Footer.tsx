@@ -4,7 +4,7 @@ import { Film } from "lucide-react"
 
 export function Footer() {
   return (
-    <footer className="border-t py-12 px-4">
+    <footer className="border-t py-10 px-4">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           {/* Logo and tagline */}
@@ -13,18 +13,20 @@ export function Footer() {
               <Film className="h-5 w-5 text-primary" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-bold font-mono">analytics</p>
-              <p className="text-xs text-muted-foreground font-mono">Track. Analyze. Remember.</p>
+              <p className="text-sm font-semibold">media review</p>
+              <p className="text-xs text-muted-foreground">
+                A small, quiet tool for remembering what you’ve watched, read, and listened to.
+              </p>
             </div>
           </div>
 
-          {/* Tech stack */}
-          <div className="text-center md:text-right">
-            <p className="text-xs text-muted-foreground font-mono">
-              Built with Next.js, React, Supabase, and AI
+          {/* Meta */}
+          <div className="text-center md:text-right space-y-1">
+            <p className="text-xs text-muted-foreground">
+              © {new Date().getFullYear()} media review
             </p>
-            <p className="text-xs text-muted-foreground font-mono mt-1">
-              © {new Date().getFullYear()} All rights reserved
+            <p className="text-xs text-muted-foreground">
+              No growth charts here. Just your own history.
             </p>
           </div>
         </div>

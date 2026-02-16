@@ -90,6 +90,10 @@ interface MediaTableProps {
   columnPicker?: React.ReactNode;
   /** When set (e.g. "finish_date"), prepend Month/Day columns and group rows by month. Use for Watched diary layout. */
   diaryDateField?: "finish_date" | null;
+  /** When set, open the details dialog for the entry with this id (e.g. from "pick random" in Planned). */
+  entryToOpenId?: string | null;
+  /** Called after opening details for entryToOpenId so parent can clear the request. */
+  onOpenDetailsDone?: () => void;
 }
 
 type SortColumn =
@@ -177,7 +181,7 @@ function getDay(finishDate: string | null): string {
   return format(d, "dd");
 }
 
-export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate, showSelectMode = false, onSelectModeChange, diaryDateField = null }: MediaTableProps) {
+export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate, showSelectMode = false, onSelectModeChange, diaryDateField = null, entryToOpenId, onOpenDetailsDone }: MediaTableProps) {
   /* Sorting Logic via Hook */
   const getValueForColumn = (entry: MediaEntry, column: ColumnKey) => {
     switch (column) {
@@ -303,6 +307,17 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
 
   const [detailsDialogOpen, setDetailsDialogOpen] = useState(false);
   const [selectedEntryForDetails, setSelectedEntryForDetails] = useState<MediaEntry | null>(null);
+
+  // When parent requests opening details for a specific entry (e.g. randomizer), open the dialog and clear the request
+  useEffect(() => {
+    if (!entryToOpenId || !onOpenDetailsDone) return;
+    const entry = entries.find((e) => e.id === entryToOpenId);
+    if (entry) {
+      setSelectedEntryForDetails(entry);
+      setDetailsDialogOpen(true);
+      onOpenDetailsDone();
+    }
+  }, [entryToOpenId, entries, onOpenDetailsDone]);
 
   // Load column visibility from Supabase
   useEffect(() => {
