@@ -197,6 +197,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const modelName = process.env.GEMINI_MODEL_NAME
+    if (!modelName) {
+      return NextResponse.json(
+        { success: false, error: "Gemini model name not configured (GEMINI_MODEL_NAME)" },
+        { status: 500 }
+      )
+    }
+
     // Determine if this is an action request or query request
     const isActionMode = shouldUseActionMode(body.query)
 
@@ -207,7 +215,7 @@ export async function POST(request: NextRequest) {
       : buildSystemPrompt(body.workspace)
 
     const model = genAI.getGenerativeModel({
-      model: "gemini-3-flash-preview",
+      model: modelName,
       systemInstruction: systemPrompt,
     })
 

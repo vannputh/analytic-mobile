@@ -11,7 +11,7 @@ const COLUMN_MAPPINGS: Record<string, string[]> = {
   type: ['type', 'genre', 'genres', 'category'],
   season: ['season', 'seasons', 'season_number'],
   episodes: ['episodes', 'episode', 'ep', 'episode_count'],
-  length: ['length', 'duration', 'runtime', 'pages', 'time'],
+  length: ['length', 'duration', 'runtime', 'time'],
   price: ['price', 'cost', 'amount', 'spent'],
   language: ['language', 'lang', 'languages'],
   platform: ['platform', 'service', 'streaming', 'where'],
@@ -257,16 +257,13 @@ function sanitizeLength(value: string): string {
   const trimmed = value.trim()
 
   // If it already has units, return as is
-  if (/\d+\s*(min|mins|minutes|hrs?|hours|pages?|pp?)\b/i.test(trimmed)) {
+  if (/\d+\s*(min|mins|minutes|hrs?|hours)\b/i.test(trimmed)) {
     return trimmed
   }
 
-  // Try to add appropriate units
+  // Try to add appropriate units (assume minutes for plain numbers)
   const num = parseInt(trimmed.replace(/\D/g, ''))
   if (!isNaN(num)) {
-    // If > 500, likely pages
-    if (num > 500) return `${num} pages`
-    // Otherwise likely minutes
     return `${num} min`
   }
 

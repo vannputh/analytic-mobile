@@ -5,10 +5,9 @@ The AI query system now supports both **query mode** (data visualization) and **
 
 ## What Changed
 
-### 1. Model Fix
-- Updated Gemini model from `gemini-2.0-flash` to `gemini-3-flash-preview` in:
-  - `/app/api/ai-query/route.ts`
-  - `/lib/services/ai-classifier.ts`
+### 1. Model Configuration
+- Gemini model name is configured via `GEMINI_MODEL_NAME` in `.env` (e.g. `gemini-3-flash-latest`).
+- Used in: `/app/api/ai-query/route.ts`, `/app/api/clean-data/route.ts`, `/lib/services/ai-classifier.ts`
 
 ### 2. New Components
 - **AIActionConfirmationDialog** (`/components/ai-action-confirmation-dialog.tsx`)
@@ -201,8 +200,8 @@ The AI query system now supports both **query mode** (data visualization) and **
 ### Issue: "Could not find entry"
 **Solution:** The title doesn't match any existing entry. Check spelling or add as new entry.
 
-### Issue: Model rate limit
-**Solution:** Should now be fixed with correct model name `gemini-3-flash-preview`. Check GEMINI_API_KEY is valid.
+### Issue: Model rate limit or "Gemini model name not configured"
+**Solution:** Set `GEMINI_MODEL_NAME` in `.env` (e.g. `gemini-3-flash-latest`). Ensure `GEMINI_API_KEY` is valid.
 
 ### Issue: Action not detected
 **Solution:** Query needs action keywords (add, update, delete, mark, set). Try: "Add Film X" instead of "Film X".

@@ -101,8 +101,6 @@ export function useMediaEntries() {
     }
 
     const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to delete this entry?")) return
-
         try {
             const result = await deleteEntry(id)
 
@@ -155,7 +153,12 @@ export function useMediaEntries() {
         initialLoading,
         watchingLoading,
         error,
-        refreshEntries: () => fetchEntries(false),
+        refreshEntries: async () => {
+            await Promise.all([
+                fetchEntries(false),
+                fetchWatchingEntries()
+            ])
+        },
         refreshWatchingEntries: fetchWatchingEntries,
         handleWatchingEntryUpdate,
         updateEntryInList,

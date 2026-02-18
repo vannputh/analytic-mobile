@@ -1,6 +1,6 @@
 /**
  * Parsing utilities for converting string representations to numeric values.
- * Handles various formats for duration, pages, and prices.
+ * Handles various formats for duration and prices.
  */
 
 /**
@@ -50,26 +50,6 @@ export function parseDurationToMinutes(duration: string | null | undefined): num
   const plainNumber = str.match(/^(\d+(?:\.\d+)?)$/)
   if (plainNumber) {
     return Math.round(parseFloat(plainNumber[1]))
-  }
-
-  return null
-}
-
-/**
- * Parse page count from strings.
- * Handles formats like:
- * - "350 pages", "350 pg", "350p"
- * - "350"
- */
-export function parsePages(pages: string | null | undefined): number | null {
-  if (!pages) return null
-
-  const str = pages.trim().toLowerCase()
-
-  // Handle "X pages" or "X pg" or "Xp"
-  const pagesMatch = str.match(/(\d+)\s*(?:pages?|pg|p)?/)
-  if (pagesMatch) {
-    return parseInt(pagesMatch[1], 10)
   }
 
   return null
@@ -182,26 +162,12 @@ export function formatDuration(minutes: number): string {
 
 /**
  * Format length string to standardized display format.
- * Converts durations to "XXhr XXmin" format, keeps pages as-is.
+ * Converts durations to "XXhr XXmin" format.
  */
 export function formatLength(length: string | null | undefined): string | null {
   if (!length) return null
 
   const str = length.trim()
-
-  // Check if it's pages (contains "page", "pg", or "p" as a unit)
-  if (/\d+\s*(pages?|pg|p)\b/i.test(str)) {
-    return str // Keep pages as-is
-  }
-
-  // Check if it's a plain number > 500 (likely pages)
-  const plainNumberMatch = str.match(/^(\d+)$/)
-  if (plainNumberMatch) {
-    const num = parseInt(plainNumberMatch[1], 10)
-    if (num > 500) {
-      return str // Likely pages, keep as-is
-    }
-  }
 
   // Parse as duration and format
   const minutes = parseDurationToMinutes(length)

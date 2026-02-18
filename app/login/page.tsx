@@ -239,9 +239,9 @@ function LoginPageContent() {
         }
       } else {
         // For login, redirect to the app
-        toast.success("Login successful!")
-        const redirectTo = searchParams.get("redirect") || "/"
-        router.push(redirectTo)
+      toast.success("Login successful!")
+      const redirectTo = searchParams.get("redirect") || "/media"
+      router.push(redirectTo)
       }
     } catch (error) {
       console.error("OTP verification error:", error)

@@ -23,7 +23,7 @@ export function Navbar({ onRequestAccess, onLogin }: NavbarProps) {
               <Film className="h-5 w-5 text-primary/80" />
             </div>
             <span className="text-lg font-semibold tracking-tight">
-              media review
+              analytics
             </span>
           </div>
 

@@ -57,7 +57,9 @@ This function:
 
 ## Environment Variables
 
-Requires `GEMINI_API_KEY` in `.env.local` (already needed for CSV import feature)
+Requires in `.env.local`:
+- `GEMINI_API_KEY` (already needed for CSV import feature)
+- `GEMINI_MODEL_NAME` (e.g. `gemini-3-flash-latest`)
 
 ## Security Features
 
@@ -81,7 +83,7 @@ The system automatically selects the best visualization:
 
 To test the feature:
 
-1. Ensure `GEMINI_API_KEY` is set in `.env.local`
+1. Ensure `GEMINI_API_KEY` and `GEMINI_MODEL_NAME` are set in `.env.local`
 2. Run the development server: `bun dev`
 3. Navigate to either `/media` or `/food` workspace
 4. Click the sparkles button next to the + button

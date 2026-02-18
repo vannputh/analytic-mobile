@@ -64,7 +64,7 @@ export function AdvancedTabContent({
                 <Input
                     value={formData.length || ""}
                     onChange={(e) => setField("length", e.target.value)}
-                    placeholder="e.g. 2h 30m, 320 pages"
+                    placeholder="e.g. 2h 30m, 120 min"
                 />
             </div>
 

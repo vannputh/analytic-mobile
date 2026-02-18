@@ -1,8 +1,8 @@
 "use client"
 
 import { useMemo } from "react"
-import { MediaEntry, VISUAL_MEDIA_TYPES, TEXT_MEDIA_TYPES } from "@/lib/database.types"
-import { parseDurationToMinutes, parsePages, parsePrice } from "@/lib/parsing-utils"
+import { MediaEntry, VISUAL_MEDIA_TYPES } from "@/lib/database.types"
+import { parseDurationToMinutes, parsePrice } from "@/lib/parsing-utils"
 import { normalizeLanguage } from "@/lib/language-utils"
 
 export interface MediaMetrics {
@@ -18,10 +18,6 @@ export interface MediaMetrics {
   daysWatched: number
   minutesByMonth: { month: string; minutes: number }[]
   minutesByMedium: Record<string, number>
-
-  // Reading Volume (Books)
-  totalPages: number
-  pagesByMonth: { month: string; pages: number }[]
 
   // Counts & Diversity
   totalItems: number
@@ -67,7 +63,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
     // Initialize aggregators
     let totalSpent = 0
     let totalMinutes = 0
-    let totalPages = 0
     let totalRatingSum = 0
     let ratedItemCount = 0
 
@@ -75,7 +70,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
     const spentByMonthMap: Record<string, { amount: number; byMedium: Record<string, number> }> = {}
     const minutesByMonthMap: Record<string, number> = {}
     const minutesByMedium: Record<string, number> = {}
-    const pagesByMonthMap: Record<string, number> = {}
     const countByMedium: Record<string, number> = {}
     const countByLanguage: Record<string, number> = {}
     const countByGenre: Record<string, number> = {}
@@ -89,7 +83,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
       const month = getMonthKey(entry.finish_date) || getMonthKey(entry.start_date)
       const medium = entry.medium
       const isVisualMedia = medium && (VISUAL_MEDIA_TYPES as readonly string[]).includes(medium)
-      const isTextMedia = medium && (TEXT_MEDIA_TYPES as readonly string[]).includes(medium)
 
       // Financial calculations
       const price = parsePrice(entry.price)
@@ -114,17 +107,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
           incrementRecord(minutesByMedium, medium, minutes)
           if (month) {
             incrementRecord(minutesByMonthMap, month, minutes)
-          }
-        }
-      }
-
-      // Reading volume (books only)
-      if (isTextMedia) {
-        const pages = parsePages(entry.length)
-        if (pages !== null && pages > 0) {
-          totalPages += pages
-          if (month) {
-            incrementRecord(pagesByMonthMap, month, pages)
           }
         }
       }
@@ -172,10 +154,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
       .map(([month, minutes]) => ({ month, minutes }))
       .sort((a, b) => a.month.localeCompare(b.month))
 
-    const pagesByMonth = Object.entries(pagesByMonthMap)
-      .map(([month, pages]) => ({ month, pages }))
-      .sort((a, b) => a.month.localeCompare(b.month))
-
     const countByMonth = Object.entries(countByMonthMap)
       .map(([month, count]) => ({ month, count }))
       .sort((a, b) => a.month.localeCompare(b.month))
@@ -203,10 +181,6 @@ export function useMediaMetrics(data: MediaEntry[]): MediaMetrics {
       daysWatched,
       minutesByMonth,
       minutesByMedium,
-
-      // Reading Volume
-      totalPages,
-      pagesByMonth,
 
       // Counts & Diversity
       totalItems: data.length,

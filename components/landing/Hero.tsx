@@ -32,7 +32,7 @@ export function Hero({ onRequestAccess, onLogin }: HeroProps) {
 
         {/* Subtitle */}
         <p className="text-base md:text-lg text-muted-foreground max-w-xl mx-auto">
-          Media Review is a minimal logbook for films, shows, books, games, and podcasts—
+          Analytics is a minimal logbook for films, shows, books, games, and podcasts—
           designed to feel more like a personal notebook than an analytics dashboard.
         </p>
 

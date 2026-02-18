@@ -13,7 +13,7 @@ export function Footer() {
               <Film className="h-5 w-5 text-primary" />
             </div>
             <div className="space-y-1">
-              <p className="text-sm font-semibold">media review</p>
+              <p className="text-sm font-semibold">analytics</p>
               <p className="text-xs text-muted-foreground">
                 A small, quiet tool for remembering what you’ve watched, read, and listened to.
               </p>
@@ -23,7 +23,7 @@ export function Footer() {
           {/* Meta */}
           <div className="text-center md:text-right space-y-1">
             <p className="text-xs text-muted-foreground">
-              © {new Date().getFullYear()} media review
+              © {new Date().getFullYear()} analytics
             </p>
             <p className="text-xs text-muted-foreground">
               No growth charts here. Just your own history.

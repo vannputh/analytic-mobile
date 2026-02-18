@@ -64,6 +64,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { updateEntry, createEntry, getStatusHistory, CreateEntryInput, getUniqueFieldValues } from "@/lib/actions";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { EpisodeTracker } from "@/components/shared/EpisodeTracker";
@@ -133,6 +134,7 @@ export function MediaDetailsDialog({
     const fileInputRef = useRef<HTMLInputElement>(null);
     const initialFormDataRef = useRef<string | null>(null);
     const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
+    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
     // --- Effects ---
 
@@ -328,8 +330,56 @@ export function MediaDetailsDialog({
                 // Create new entry
                 const result = await createEntry(payload);
                 if (result.success) {
+                    const createdEntry = result.data;
+                    
+                    // Auto-create episode history for Watching or Finished status
+                    const shouldAutoCreateEpisodes = 
+                        (formData.status === "Watching" || formData.status === "Finished") && 
+                        formData.episodes && 
+                        formData.episodes > 0;
+                    
+                    if (shouldAutoCreateEpisodes) {
+                        const episodeHistory: EpisodeWatchRecord[] = [];
+                        let watchedDate: string;
+                        let episodesToCreate: number;
+                        
+                        if (formData.status === "Watching") {
+                            // For Watching: create only episode 1 with start_date
+                            watchedDate = formData.start_date || new Date().toISOString();
+                            episodesToCreate = 1;
+                        } else {
+                            // For Finished: create all episodes with finish_date
+                            watchedDate = formData.finish_date || new Date().toISOString();
+                            episodesToCreate = formData.episodes || 1;
+                        }
+                        
+                        // Build episode history
+                        for (let ep = 1; ep <= episodesToCreate; ep++) {
+                            episodeHistory.push({
+                                episode: ep,
+                                watched_at: watchedDate,
+                            });
+                        }
+                        
+                        // Update entry with episode history
+                        const updateResult = await updateEntry(createdEntry.id, {
+                            episode_history: episodeHistory as any,
+                            episodes_watched: episodesToCreate,
+                            last_watched_at: watchedDate,
+                        });
+                        
+                        if (updateResult.success) {
+                            onSuccess?.(updateResult.data);
+                        } else {
+                            // Still show success for creation, but log the episode history error
+                            console.error("Failed to create episode history:", updateResult.error);
+                            onSuccess?.(createdEntry);
+                        }
+                    } else {
+                        onSuccess?.(createdEntry);
+                    }
+                    
                     toast.success("Entry created");
-                    onSuccess?.(result.data);
                     initialFormDataRef.current = null;
                     onOpenChange(false);
                 } else {
@@ -344,10 +394,15 @@ export function MediaDetailsDialog({
         }
     };
 
-    const handleDelete = () => {
+    const handleDeleteClick = () => {
+        setShowDeleteConfirm(true);
+    };
+
+    const handleDeleteConfirm = () => {
         if (onDelete && entry) {
             onDelete(entry.id);
             initialFormDataRef.current = null;
+            setShowDeleteConfirm(false);
             onOpenChange(false);
         }
     };
@@ -1103,14 +1158,16 @@ export function MediaDetailsDialog({
 
                         <DialogFooter className="border-t p-4 flex flex-wrap justify-between gap-2 bg-muted/20 shrink-0 w-full z-10">
                             <div className="flex gap-2">
-                                <Button
-                                    variant="outline"
-                                    className="border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:hover:bg-red-950 dark:text-red-400"
-                                    onClick={handleDelete}
-                                >
-                                    <Trash2 className="mr-2 h-4 w-4" />
-                                    Delete
-                                </Button>
+                                {!isNewEntry && onDelete && (
+                                    <Button
+                                        variant="outline"
+                                        className="border-red-200 bg-red-50 hover:bg-red-100 text-red-600 hover:text-red-700 dark:border-red-800 dark:bg-red-950/50 dark:hover:bg-red-950 dark:text-red-400"
+                                        onClick={handleDeleteClick}
+                                    >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete
+                                    </Button>
+                                )}
                             </div>
                             <div className="flex gap-2">
                                 <Button variant="outline" onClick={() => handleOpenChange(false)}>Cancel</Button>
@@ -1125,24 +1182,25 @@ export function MediaDetailsDialog({
             </DialogContent >
         </Dialog >
 
-        <Dialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
-            <DialogContent className="max-w-sm">
-                <DialogHeader>
-                    <DialogTitle>Unsaved changes</DialogTitle>
-                    <DialogDescription>
-                        You have unsaved changes. Discard them?
-                    </DialogDescription>
-                </DialogHeader>
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => setShowDiscardConfirm(false)}>
-                        Keep editing
-                    </Button>
-                    <Button variant="destructive" onClick={handleConfirmDiscard}>
-                        Discard
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <ConfirmDialog
+            open={showDiscardConfirm}
+            onOpenChange={setShowDiscardConfirm}
+            title="Unsaved changes"
+            description="You have unsaved changes. Discard them?"
+            cancelLabel="Keep editing"
+            confirmLabel="Discard"
+            variant="destructive"
+            onConfirm={handleConfirmDiscard}
+        />
+        <ConfirmDialog
+            open={showDeleteConfirm}
+            onOpenChange={setShowDeleteConfirm}
+            title="Delete entry?"
+            description={entry ? `This will permanently remove "${entry.title}" from your library. This action cannot be undone.` : ""}
+            confirmLabel="Delete"
+            variant="destructive"
+            onConfirm={handleDeleteConfirm}
+        />
         </>
     );
 }

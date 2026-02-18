@@ -220,6 +220,10 @@ export type Database = {
         Args: { query_text: string }
         Returns: unknown[]
       }
+      is_admin: {
+        Args: Record<string, never>
+        Returns: boolean
+      }
     }
     Enums: {
       [_ in never]: never

@@ -129,7 +129,7 @@ export function MediaDetailsSection({
                         id="length"
                         value={formData.length || ""}
                         onChange={(e) => setFormData({ ...formData, length: e.target.value })}
-                        placeholder="e.g., 120 min, 300 pages"
+                        placeholder="e.g., 120 min, 2h 30m"
                     />
                 </div>
             </div>

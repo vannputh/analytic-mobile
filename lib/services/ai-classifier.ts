@@ -20,9 +20,15 @@ export async function classifyWithGemini(
   apiKey: string
 ): Promise<ClassificationOutput | null> {
   try {
+    const modelName = process.env.GEMINI_MODEL_NAME;
+    if (!modelName) {
+      console.error("GEMINI_MODEL_NAME not configured");
+      return null;
+    }
+
     const { GoogleGenerativeAI } = await import("@google/generative-ai");
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: "gemini-3-flash-preview" });
+    const model = genAI.getGenerativeModel({ model: modelName });
 
     const prompt = `You are a media classification expert. Based on the following information, classify this ${input.type || "media"}:
 

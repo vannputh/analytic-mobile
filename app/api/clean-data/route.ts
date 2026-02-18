@@ -74,9 +74,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const modelName = process.env.GEMINI_MODEL_NAME
+    if (!modelName) {
+      return NextResponse.json(
+        { error: "Gemini model name not configured (GEMINI_MODEL_NAME)" },
+        { status: 500 }
+      )
+    }
+
     const genAI = new GoogleGenerativeAI(apiKey)
     const model = genAI.getGenerativeModel({
-      model: "gemini-flash-latest",
+      model: modelName,
       systemInstruction: SYSTEM_INSTRUCTION,
     })
 

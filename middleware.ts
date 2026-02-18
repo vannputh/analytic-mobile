@@ -84,7 +84,7 @@ export async function middleware(request: NextRequest) {
   // Redirect authenticated users away from login page (only GET requests)
   if (user && pathname === "/login" && request.method === "GET") {
     const url = request.nextUrl.clone()
-    url.pathname = "/"
+    url.pathname = "/media"
     return NextResponse.redirect(url)
   }
 
