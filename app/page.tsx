@@ -1,7 +1,7 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { Hero, Features, Navbar, Footer } from "@/components/landing"
+import { Hero, Features, Navbar } from "@/components/landing"
 import { ThemeProvider } from "@/components/theme-provider"
 
 export default function LandingPage() {
@@ -23,7 +23,6 @@ export default function LandingPage() {
           <Hero onRequestAccess={handleRequestAccess} onLogin={handleLogin} />
           <Features />
         </main>
-        <Footer />
       </div>
     </ThemeProvider>
   )

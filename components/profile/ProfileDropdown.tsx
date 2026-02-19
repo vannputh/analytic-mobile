@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button"
 import { createClient } from "@/lib/supabase/client"
-import { User, LogOut, Shield } from "lucide-react"
+import { User, LogOut, Shield, Sun, Moon } from "lucide-react"
 import { toast } from "sonner"
 
 interface ProfileDropdownProps {
@@ -23,6 +23,13 @@ export function ProfileDropdown({ isAdmin }: ProfileDropdownProps) {
   const router = useRouter()
   const [email, setEmail] = useState<string>("")
   const [loading, setLoading] = useState(true)
+  const [isDark, setIsDark] = useState(true)
+  const [mounted, setMounted] = useState(false)
+
+  useEffect(() => {
+    setMounted(true)
+    setIsDark(document.documentElement.classList.contains("dark"))
+  }, [])
 
   useEffect(() => {
     const getUser = async () => {
@@ -47,9 +54,22 @@ export function ProfileDropdown({ isAdmin }: ProfileDropdownProps) {
     }
   }
 
+  const toggleTheme = () => {
+    const newIsDark = !isDark
+    setIsDark(newIsDark)
+    document.documentElement.classList.toggle("dark", newIsDark)
+    try {
+      if (typeof window !== "undefined" && window.localStorage) {
+        window.localStorage.setItem("theme", newIsDark ? "dark" : "light")
+      }
+    } catch {
+      // Storage not available (e.g. private mode, iframe, or restricted context)
+    }
+  }
+
   if (loading) {
     return (
-      <Button variant="ghost" size="icon" className="h-8 w-8">
+      <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-black text-white hover:bg-black/80">
         <User className="h-4 w-4" />
       </Button>
     )
@@ -58,7 +78,7 @@ export function ProfileDropdown({ isAdmin }: ProfileDropdownProps) {
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
+        <Button variant="ghost" size="icon" className="h-8 w-8 rounded-full bg-black text-white hover:bg-black/80">
           <User className="h-4 w-4" />
           <span className="sr-only">Profile menu</span>
         </Button>
@@ -86,6 +106,20 @@ export function ProfileDropdown({ isAdmin }: ProfileDropdownProps) {
               Admin Panel
             </DropdownMenuItem>
           </>
+        )}
+        <DropdownMenuSeparator />
+        {mounted && (
+          <DropdownMenuItem
+            onClick={toggleTheme}
+            className="font-mono text-xs cursor-pointer"
+          >
+            {isDark ? (
+              <Sun className="mr-2 h-3 w-3" />
+            ) : (
+              <Moon className="mr-2 h-3 w-3" />
+            )}
+            {isDark ? "Light mode" : "Dark mode"}
+          </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
         <DropdownMenuItem

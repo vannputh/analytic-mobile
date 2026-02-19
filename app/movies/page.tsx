@@ -180,13 +180,15 @@ function EntriesPageContent() {
                 <>
                   {watchedEntries.length > 0 && (
                     <>
-                      <GlobalFilterBar
-                        filters={filters}
-                        onFiltersChange={setFilters}
-                        options={filterOptions}
-                        totalCount={watchedEntries.length}
-                        filteredCount={filteredWatched.length}
-                      />
+                      <div className="sticky top-12 sm:top-14 z-40">
+                        <GlobalFilterBar
+                          filters={filters}
+                          onFiltersChange={setFilters}
+                          options={filterOptions}
+                          totalCount={watchedEntries.length}
+                          filteredCount={filteredWatched.length}
+                        />
+                      </div>
                       <div className="mb-6 mt-4 space-y-4">
                         <div className="flex flex-wrap items-center gap-2">
                           <div className="relative flex-1 min-w-[150px]">

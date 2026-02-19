@@ -96,7 +96,86 @@ export function WatchedDiaryTable({
 
   return (
     <div className="space-y-4">
-      <div className="rounded-md border overflow-x-auto">
+      {/* Mobile card view */}
+      <div className="sm:hidden space-y-4">
+        {groups.map(([monthKey, groupEntries]) => {
+          const monthLabel = groupEntries[0]
+            ? getMonthLabel(groupEntries[0].finish_date)
+            : monthKey;
+
+          return (
+            <div key={monthKey} className="space-y-2">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Calendar className="h-4 w-4 flex-shrink-0" />
+                <span className="font-mono text-xs uppercase tracking-wide">
+                  {monthLabel}
+                </span>
+              </div>
+              <div className="space-y-2">
+                {groupEntries.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={(e) => openDetails(entry, e)}
+                    className="w-full text-left border rounded-lg bg-card/40 p-3 flex gap-3 hover:bg-muted/60 transition-colors"
+                  >
+                    <div className="w-12 h-16 relative bg-muted rounded flex-shrink-0 overflow-hidden">
+                      <SafeImage
+                        src={entry.poster_url ?? ""}
+                        alt={entry.title}
+                        fill
+                        className="object-cover"
+                        fallbackElement={
+                          <span className="text-xl flex items-center justify-center h-full">
+                            {getPlaceholderPoster(entry.type)}
+                          </span>
+                        }
+                      />
+                    </div>
+                    <div className="flex-1 min-w-0 flex flex-col gap-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-medium text-sm line-clamp-2">
+                          {entry.title}
+                        </span>
+                        <span className="font-mono text-[11px] text-muted-foreground tabular-nums">
+                          {getDay(entry.finish_date)}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between gap-2 mt-1">
+                        {entry.my_rating != null ? (
+                          <StarRatingDisplay
+                            rating={entry.my_rating}
+                            max={10}
+                            size="sm"
+                          />
+                        ) : (
+                          <span className="text-[11px] text-muted-foreground">
+                            No rating
+                          </span>
+                        )}
+                        {onEdit && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 flex-shrink-0"
+                            onClick={(e) => handleEdit(entry, e)}
+                            title="Edit"
+                          >
+                            <Edit className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Desktop table view */}
+      <div className="rounded-md border overflow-x-auto hidden sm:block">
         <Table>
           <TableHeader>
             <TableRow>

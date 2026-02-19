@@ -5,18 +5,18 @@ import { Film, Sparkles, UtensilsCrossed } from "lucide-react"
 const points = [
   {
     icon: Film,
-    title: "One place for everything",
-    body: "Log films, shows, books, games, and podcasts in a single, quiet timeline.",
+    title: "one place for everything",
+    body: "log films, shows, books, games, and podcasts in a single, quiet timeline.",
   },
   {
     icon: UtensilsCrossed,
-    title: "Moments, not metrics",
-    body: "Capture how something felt, not just when you finished it or what you rated it.",
+    title: "moments, not metrics",
+    body: "capture how something felt, not just when you finished it or what you rated it.",
   },
   {
     icon: Sparkles,
-    title: "Gentle AI help",
-    body: "Ask natural questions later—\"what comfort shows did I watch last winter?\"—without designing dashboards.",
+    title: "gentle ai help",
+    body: "ask natural questions later—\"what comfort shows did i watch last winter?\"—without designing dashboards.",
   },
 ]
 
@@ -26,13 +26,13 @@ export function Features() {
       <div className="max-w-3xl mx-auto space-y-8">
         <div className="space-y-3 text-left">
           <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground">
-            Why analytics
+            why analytics
           </p>
           <h2 className="text-2xl md:text-3xl font-semibold tracking-tight">
-            Minimal, on purpose
+            minimal, on purpose
           </h2>
           <p className="text-sm md:text-base text-muted-foreground">
-            No busy charts, no growth curves. Just a calm, opinionated surface for keeping
+            no busy charts, no growth curves. just a calm, opinionated surface for keeping
             track of the media that actually matters to you.
           </p>
         </div>

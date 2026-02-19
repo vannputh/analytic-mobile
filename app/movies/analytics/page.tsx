@@ -113,19 +113,18 @@ export default function AnalyticsPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Header */}
-      <PageHeader title="Analytics" />
-
-      {/* Global Filter Bar */}
-      {entries.length > 0 && (
-        <GlobalFilterBar
-          filters={filters}
-          onFiltersChange={setFilters}
-          options={filterOptions}
-          totalCount={entries.length}
-          filteredCount={filteredEntries.length}
-        />
-      )}
+      <PageHeader
+        title="Analytics"
+        filterBar={entries.length > 0 ? (
+          <GlobalFilterBar
+            filters={filters}
+            onFiltersChange={setFilters}
+            options={filterOptions}
+            totalCount={entries.length}
+            filteredCount={filteredEntries.length}
+          />
+        ) : undefined}
+      />
 
       {/* Main Content */}
       <main className="p-4 sm:p-6">

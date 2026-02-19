@@ -96,7 +96,59 @@ export function RequestsTable({ requests, onUpdate }: RequestsTableProps) {
 
   return (
     <>
-      <div className="border rounded-lg">
+      {/* Mobile card view */}
+      <div className="sm:hidden space-y-2">
+        {requests.map((request) => (
+          <div
+            key={request.id}
+            className="border rounded-lg p-3 bg-card/40 flex flex-col gap-2"
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="font-mono text-xs text-muted-foreground uppercase">Email</span>
+              <Badge variant="secondary" className="font-mono text-[10px] px-1.5 py-0">
+                {request.status}
+              </Badge>
+            </div>
+            <div className="font-mono text-xs break-all">
+              {request.email}
+            </div>
+            <div className="text-[11px] text-muted-foreground font-mono">
+              Requested: {new Date(request.requested_at).toLocaleDateString()}
+            </div>
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
+              <Button
+                size="sm"
+                variant="default"
+                onClick={() => handleApprove(request.user_id)}
+                disabled={loading === request.user_id}
+                className="font-mono text-xs flex-1 min-w-[100px]"
+              >
+                {loading === request.user_id ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <>
+                    <Check className="h-3 w-3 mr-1" />
+                    Approve
+                  </>
+                )}
+              </Button>
+              <Button
+                size="sm"
+                variant="destructive"
+                onClick={() => handleReject(request.user_id)}
+                disabled={loading === request.user_id}
+                className="font-mono text-xs flex-1 min-w-[100px]"
+              >
+                <X className="h-3 w-3 mr-1" />
+                Reject
+              </Button>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table view */}
+      <div className="border rounded-lg overflow-x-auto hidden sm:block">
         <Table>
           <TableHeader>
             <TableRow>

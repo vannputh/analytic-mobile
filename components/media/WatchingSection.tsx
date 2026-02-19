@@ -38,16 +38,16 @@ export function WatchingSection({ entries, loading, onUpdate, onDelete }: Watchi
             </button>
             {!collapsed && (
                 <div className="overflow-x-auto pb-2 -mx-4 px-4 sm:-mx-6 sm:px-6">
-                    <div className="flex gap-4" style={{ minWidth: 'max-content' }}>
+                    <div className="flex gap-3 sm:gap-4" style={{ minWidth: 'max-content' }}>
                         {loading ? (
                             Array.from({ length: 4 }).map((_, i) => (
-                                <div key={i} className="flex-shrink-0 w-72">
+                                <div key={i} className="flex-shrink-0 w-[72vw] sm:w-72">
                                     <WatchingCardSkeleton />
                                 </div>
                             ))
                         ) : (
                             entries.map((entry) => (
-                                <div key={entry.id} className="flex-shrink-0 w-72">
+                                <div key={entry.id} className="flex-shrink-0 w-[72vw] sm:w-72">
                                     <WatchingCard
                                         entry={entry}
                                         onUpdate={onUpdate}

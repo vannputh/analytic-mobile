@@ -52,7 +52,7 @@ export function GlobalFilterBar({
   ].reduce((a, b) => a + b, 0)
 
   return (
-    <div className="sticky top-0 z-40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
+    <div className="bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 border-b">
       <div className="flex items-center gap-1.5 sm:gap-2 p-2 sm:p-3 overflow-x-auto scrollbar-hide">
         <div className="hidden sm:flex items-center gap-1.5 text-muted-foreground flex-shrink-0">
           <Filter className="h-3.5 w-3.5" />

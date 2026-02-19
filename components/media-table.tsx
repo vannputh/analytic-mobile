@@ -492,79 +492,80 @@ export function MediaTable({ entries, onEdit, onDelete, onRefresh, onEntryUpdate
       )}
 
       {/* Mobile Card View - visible on small screens */}
-      <div className="grid grid-cols-2 gap-3 sm:hidden">
-        {sortedEntries.map((entry) => (
-          <Card
-            key={entry.id}
-            className={`cursor-pointer hover:bg-muted/50 transition-colors ${showSelectMode && selectedEntries.has(entry.id) ? "ring-2 ring-primary" : ""}`}
-            onClick={() => {
-              if (showSelectMode) {
-                toggleSelectEntry(entry.id);
-              } else {
-                setSelectedEntryForDetails(entry);
-                setDetailsDialogOpen(true);
-              }
-            }}
-          >
-            <CardContent className="p-3">
-              <div className="flex gap-3">
-                {/* Poster */}
-                <div className="w-14 h-20 relative bg-muted rounded flex-shrink-0 overflow-hidden">
-                  <SafeImage
-                    src={entry.poster_url || ""}
-                    alt={entry.title}
-                    fill
-                    className="object-cover"
-                    fallbackElement={
-                      <span className="text-xl flex items-center justify-center h-full">
-                        {getPlaceholderPoster(entry.type)}
-                      </span>
-                    }
-                  />
-                  {showSelectMode && selectedEntries.has(entry.id) && (
-                    <div className="absolute inset-0 bg-primary/20 flex items-center justify-center">
-                      <CheckSquare className="h-5 w-5 text-primary" />
-                    </div>
+      <div className="grid grid-cols-2 gap-2 sm:hidden">
+        {sortedEntries.map((entry) => {
+          const statusVariants = {
+            "Finished": "default",
+            "Watching": "secondary",
+            "On Hold": "outline",
+            "Dropped": "destructive",
+            "Plan to Watch": "outline",
+            "Planned": "outline",
+          } as const;
+
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              className={`relative rounded-lg overflow-hidden bg-muted text-left focus:outline-none focus:ring-2 focus:ring-ring ${showSelectMode && selectedEntries.has(entry.id) ? "ring-2 ring-primary" : ""}`}
+              onClick={() => {
+                if (showSelectMode) {
+                  toggleSelectEntry(entry.id);
+                } else {
+                  setSelectedEntryForDetails(entry);
+                  setDetailsDialogOpen(true);
+                }
+              }}
+            >
+              {/* Poster – portrait ratio */}
+              <div className="relative w-full aspect-[2/3]">
+                <SafeImage
+                  src={entry.poster_url || ""}
+                  alt={entry.title}
+                  fill
+                  className="object-cover"
+                  fallbackElement={
+                    <span className="absolute inset-0 text-3xl flex items-center justify-center bg-muted">
+                      {getPlaceholderPoster(entry.type)}
+                    </span>
+                  }
+                />
+
+                {/* Dark gradient at bottom */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+
+                {/* Status badge – top left */}
+                <div className="absolute top-1.5 left-1.5">
+                  <Badge
+                    variant={statusVariants[entry.status as keyof typeof statusVariants] || "outline"}
+                    className="text-[9px] px-1 py-0 h-4 bg-black/60 backdrop-blur-sm text-white border-0 font-mono"
+                  >
+                    {entry.status || "N/A"}
+                  </Badge>
+                </div>
+
+                {/* Select overlay */}
+                {showSelectMode && selectedEntries.has(entry.id) && (
+                  <div className="absolute inset-0 bg-primary/25 flex items-center justify-center">
+                    <CheckSquare className="h-6 w-6 text-white drop-shadow" />
+                  </div>
+                )}
+
+                {/* Title + rating overlay at bottom */}
+                <div className="absolute bottom-0 left-0 right-0 p-2">
+                  <p className="text-white text-[11px] font-medium leading-tight line-clamp-2 drop-shadow-md">
+                    {entry.title}
+                  </p>
+                  {entry.my_rating != null && (
+                    <p className="text-amber-400 text-[11px] font-mono mt-0.5">
+                      ★ {entry.my_rating % 1 === 0 ? entry.my_rating : entry.my_rating.toFixed(1)}
+                    </p>
                   )}
                 </div>
-                {/* Info */}
-                <div className="flex-1 min-w-0 flex flex-col">
-                  <h3 className="font-medium text-sm leading-tight line-clamp-2">{entry.title}</h3>
-                  <div className="mt-1">
-                    {(() => {
-                      const variants = {
-                        "Finished": "default",
-                        "Watching": "secondary",
-                        "On Hold": "outline",
-                        "Dropped": "destructive",
-                            "Plan to Watch": "outline",
-                            "Planned": "outline",
-                          } as const;
-                          return (
-                            <Badge
-                              variant={variants[entry.status as keyof typeof variants] || "outline"}
-                              className="text-[10px] px-1.5 py-0"
-                            >
-                          {entry.status || "N/A"}
-                        </Badge>
-                      );
-                    })()}
-                  </div>
-                  <div className="mt-auto pt-1 flex items-center justify-between">
-                    {entry.my_rating != null ? (
-                      <StarRatingDisplay rating={entry.my_rating} max={10} size="sm" />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
-                    {entry.medium && (
-                      <span className="text-[10px] text-muted-foreground">{entry.medium}</span>
-                    )}
-                  </div>
-                </div>
               </div>
-            </CardContent>
-          </Card>
-        ))}
+            </button>
+          );
+        })}
         {sortedEntries.length === 0 && (
           <div className="col-span-2 text-center py-8 text-muted-foreground">
             No entries in this view.

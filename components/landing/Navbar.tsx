@@ -1,7 +1,6 @@
 "use client"
 
 import { Button } from "@/components/ui/button"
-import { Film } from "lucide-react"
 import { useTheme } from "@/components/theme-provider"
 import { Moon, Sun } from "lucide-react"
 
@@ -19,9 +18,6 @@ export function Navbar({ onRequestAccess, onLogin }: NavbarProps) {
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-              <Film className="h-5 w-5 text-primary/80" />
-            </div>
             <span className="text-lg font-semibold tracking-tight">
               analytics
             </span>
@@ -37,19 +33,11 @@ export function Navbar({ onRequestAccess, onLogin }: NavbarProps) {
             >
               <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-              <span className="sr-only">Toggle theme</span>
+              <span className="sr-only">toggle theme</span>
             </Button>
-            
-            <Button
-              variant="ghost"
-              onClick={onLogin}
-            >
-              Login
-            </Button>
-            <Button
-              onClick={onRequestAccess}
-            >
-              Request Access
+
+            <Button onClick={onLogin}>
+              get started
             </Button>
           </div>
         </div>
