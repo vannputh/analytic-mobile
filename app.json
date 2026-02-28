@@ -1,0 +1,25 @@
+{
+  "expo": {
+    "name": "Analytics Mobile",
+    "slug": "analytics-mobile",
+    "scheme": "analytics-mobile",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "plugins": [
+      "expo-router",
+      "expo-secure-store",
+      "expo-font"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.analytics.mobile"
+    },
+    "android": {
+      "package": "com.analytics.mobile"
+    },
+    "extra": {
+      "backendUrl": "http://localhost:3000"
+    }
+  }
+}
