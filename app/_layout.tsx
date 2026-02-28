@@ -8,9 +8,9 @@ export default function RootLayout() {
   return (
     <AppProviders>
       <Stack screenOptions={{ headerShown: false }}>
-        <Stack.Screen name="index" />
-        <Stack.Screen name="(auth)" />
-        <Stack.Screen name="(tabs)" />
+        <Stack.Screen name="index" options={{ animation: "none" }} />
+        <Stack.Screen name="(auth)" options={{ animation: "none" }} />
+        <Stack.Screen name="(tabs)" options={{ animation: "none" }} />
       </Stack>
     </AppProviders>
   )

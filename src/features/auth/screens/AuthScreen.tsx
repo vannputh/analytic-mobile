@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { Ionicons } from "@expo/vector-icons"
 import { useRouter } from "expo-router"
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -59,6 +61,8 @@ export function AuthScreen() {
   const [otp, setOtp] = useState("")
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const entryCardOpacity = useRef(new Animated.Value(0)).current
+  const entryCardTranslateY = useRef(new Animated.Value(44)).current
   const messageTone = useMemo(() => getMessageTone(message), [message])
   const isDark = theme === "dark"
   const colors = useMemo(
@@ -88,6 +92,23 @@ export function AuthScreen() {
   const canSubmit = Boolean(email.trim()) && (shouldRequestOtp || canVerifyOtp)
   const pageTitle = mode === "signup" ? "request access" : "login"
   const halfCardHeight = Math.round(screenHeight * 0.5)
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(entryCardOpacity, {
+        toValue: 1,
+        duration: 340,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true
+      }),
+      Animated.timing(entryCardTranslateY, {
+        toValue: 0,
+        duration: 420,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true
+      })
+    ]).start()
+  }, [entryCardOpacity, entryCardTranslateY])
 
   const primaryActionLabel = useMemo(() => {
     if (canVerifyOtp) {
@@ -195,11 +216,18 @@ export function AuthScreen() {
             </View>
           </View>
 
-          <View
+          <Animated.View
             style={[
               styles.glassCardShell,
               styles.bottomCardShell,
-              { shadowColor: colors.glassShadow, height: halfCardHeight, backgroundColor: colors.cardFill, paddingBottom: 18 + insets.bottom }
+              {
+                shadowColor: colors.glassShadow,
+                height: halfCardHeight,
+                backgroundColor: colors.cardFill,
+                paddingBottom: 18 + insets.bottom,
+                opacity: entryCardOpacity,
+                transform: [{ translateY: entryCardTranslateY }]
+              }
             ]}
           >
             <View style={styles.titleBlock}>
@@ -262,7 +290,7 @@ export function AuthScreen() {
                 {mode === "login" ? "request access" : "login"}
               </Text>
             </Pressable>
-          </View>
+          </Animated.View>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>
