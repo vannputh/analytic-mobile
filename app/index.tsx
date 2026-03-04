@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Redirect } from "expo-router"
 import { Animated, Easing, Platform, StyleSheet, Text } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { supabase } from "@/src/shared/api/supabase"
+import { getSessionSnapshot } from "@/src/shared/api/session"
 
 const OPENING_MIN_DURATION_MS = 1100
 const MONO_FONT_FAMILY = Platform.select({
@@ -21,9 +21,14 @@ export default function IndexScreen() {
   useEffect(() => {
     let mounted = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    void getSessionSnapshot().then(({ session, status }) => {
       if (!mounted) return
-      const hasSession = !!data.session
+
+      if (status !== "resolved" && typeof __DEV__ !== "undefined" && __DEV__) {
+        console.warn(`[auth] getSessionSnapshot returned ${status} on app entry`)
+      }
+
+      const hasSession = Boolean(session)
       setAuthenticated(hasSession)
       if (!hasSession) {
         setRequiresOpening(true)

@@ -1,5 +1,5 @@
-import { supabase } from "@/src/shared/api/supabase"
 import { env } from "@/src/shared/config/env"
+import { getSessionSnapshot } from "@/src/shared/api/session"
 
 interface RequestOptions extends RequestInit {
   authenticated?: boolean
@@ -20,14 +20,17 @@ export async function backendFetch<T>(
   }
 
   if (authenticated) {
-    const { data } = await supabase.auth.getSession()
-    const token = data.session?.access_token
+    const { session, status } = await getSessionSnapshot()
+    if (status !== "resolved" && typeof __DEV__ !== "undefined" && __DEV__) {
+      console.warn(`[backendFetch] getSessionSnapshot returned ${status}; sending request without auth token`)
+    }
+    const token = session?.access_token
     if (token) {
       ;(requestHeaders as Record<string, string>).Authorization = `Bearer ${token}`
     }
   }
 
-  const targetUrl = `${env.backendUrl}${path}`
+  const targetUrl = `${env.apiUrl}${path}`
   let response: Response
   try {
     response = await fetch(targetUrl, {
@@ -38,13 +41,13 @@ export async function backendFetch<T>(
     if (typeof __DEV__ !== "undefined" && __DEV__) {
       console.error("[backendFetch] Network error", {
         path,
-        baseUrl: env.backendUrl,
+        baseUrl: env.apiUrl,
         targetUrl,
         error
       })
     }
     throw new Error(
-      `Cannot reach backend at ${env.backendUrl}. Start it with "bun run backend:dev" and verify EXPO_PUBLIC_BACKEND_URL.`
+      `Cannot reach API routes at ${env.apiUrl}. Start Expo with "bun run dev" and verify EXPO_PUBLIC_API_URL (or EXPO_PUBLIC_BACKEND_URL for fallback compatibility).`
     )
   }
 

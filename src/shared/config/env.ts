@@ -28,77 +28,111 @@ function isLoopbackHost(hostname: string): boolean {
   return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1"
 }
 
-function parseHost(value: string): string | null {
+function parseOrigin(value: string): string | null {
   const trimmed = value.trim()
   if (!trimmed) return null
 
   try {
-    return new URL(trimmed).hostname
+    const withScheme = /^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(trimmed) ? trimmed : `http://${trimmed}`
+    const parsed = new URL(withScheme)
+    const protocol = (parsed.protocol === "https:" || parsed.protocol === "exps:") ? "https:" : "http:"
+    return `${protocol}//${parsed.host}`
   } catch {
-    const withoutScheme = trimmed.replace(/^[a-zA-Z]+:\/\//, "")
-    const authority = withoutScheme.split("/")[0] ?? ""
-    const host = authority.split(":")[0] ?? ""
-    return host || null
+    return null
   }
 }
 
-function getExpoRuntimeHost(): string | null {
+function getExpoRuntimeOrigin(): string | null {
   const candidates = [
     Constants.expoConfig?.hostUri,
     (Constants as unknown as { expoGoConfig?: { debuggerHost?: string } }).expoGoConfig?.debuggerHost,
     Constants.linkingUri
   ]
 
+  let fallbackLoopbackOrigin: string | null = null
+
   for (const candidate of candidates) {
     if (!candidate) continue
-    const host = parseHost(candidate)
-    if (host && !isLoopbackHost(host)) {
-      return host
+    const origin = parseOrigin(candidate)
+    if (!origin) continue
+
+    const hostname = new URL(origin).hostname
+    if (!isLoopbackHost(hostname)) {
+      return origin
     }
+    fallbackLoopbackOrigin = fallbackLoopbackOrigin ?? origin
   }
 
-  return null
+  return fallbackLoopbackOrigin
 }
 
-function resolveBackendUrl(rawValue: string): string {
-  if (!rawValue) return rawValue
+function resolveApiUrl(rawValue: string): string {
+  const fallbackOrigin = getExpoRuntimeOrigin() ?? "http://puths-book.local:8081"
+  const initialValue = rawValue || fallbackOrigin
 
   const isDev = typeof __DEV__ !== "undefined" ? __DEV__ : process.env.NODE_ENV !== "production"
-  if (!isDev) return rawValue
+  if (!isDev) return initialValue.replace(/\/$/, "")
 
   // iOS simulators can reach localhost directly, so keep loopback values there.
   // For physical devices and Android emulators, keep LAN-host rewrite behavior.
   if (!Constants.isDevice && Platform.OS === "ios") {
-    return rawValue
+    return initialValue.replace(/\/$/, "")
   }
 
   let parsed: URL
   try {
-    parsed = new URL(rawValue)
+    parsed = new URL(initialValue)
   } catch {
-    return rawValue
+    return initialValue
   }
 
   if (!isLoopbackHost(parsed.hostname)) {
-    return rawValue
+    return parsed.toString().replace(/\/$/, "")
   }
 
-  const runtimeHost = getExpoRuntimeHost()
-  if (!runtimeHost) {
-    return rawValue
+  const runtimeOrigin = getExpoRuntimeOrigin()
+  if (!runtimeOrigin) {
+    return parsed.toString().replace(/\/$/, "")
+  }
+
+  const runtimeHost = new URL(runtimeOrigin).hostname
+  if (isLoopbackHost(runtimeHost)) {
+    return parsed.toString().replace(/\/$/, "")
   }
 
   parsed.hostname = runtimeHost
   return parsed.toString().replace(/\/$/, "")
 }
 
-const configuredBackendUrl =
-  getEnvValue("EXPO_PUBLIC_BACKEND_URL") ?? getExtraValue("backendUrl") ?? ""
+const configuredApiUrl =
+  getEnvValue("EXPO_PUBLIC_API_URL")
+  ?? getEnvValue("EXPO_PUBLIC_BACKEND_URL")
+  ?? getExtraValue("apiUrl")
+  ?? getExtraValue("backendUrl")
+  ?? ""
+
+const resolvedApiUrl = resolveApiUrl(configuredApiUrl)
+
+const configuredSupabaseUrl =
+  getEnvValue("EXPO_PUBLIC_SUPABASE_URL")
+  ?? getEnvValue("NEXT_PUBLIC_SUPABASE_URL")
+  ?? getExtraValue("supabaseUrl")
+  ?? getExtraValue("NEXT_PUBLIC_SUPABASE_URL")
+  ?? ""
+
+const configuredSupabaseAnonKey =
+  getEnvValue("EXPO_PUBLIC_SUPABASE_ANON_KEY")
+  ?? getEnvValue("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  ?? getExtraValue("supabaseAnonKey")
+  ?? getExtraValue("NEXT_PUBLIC_SUPABASE_ANON_KEY")
+  ?? ""
 
 export const env = {
-  supabaseUrl: getEnvValue("EXPO_PUBLIC_SUPABASE_URL") ?? "",
-  supabaseAnonKey: getEnvValue("EXPO_PUBLIC_SUPABASE_ANON_KEY") ?? "",
-  backendUrl: resolveBackendUrl(configuredBackendUrl)
+  supabaseUrl: configuredSupabaseUrl,
+  supabaseAnonKey: configuredSupabaseAnonKey,
+  apiUrl: resolvedApiUrl,
+  // Kept for compatibility with existing call sites during migration.
+  backendUrl: resolvedApiUrl
 }
 
 function validateHttpUrlEnv(key: string, value: string): string | null {
@@ -136,21 +170,21 @@ export function assertEnv(): void {
   const missing: string[] = []
   const invalid: string[] = []
 
-  if (!env.supabaseUrl) missing.push("EXPO_PUBLIC_SUPABASE_URL")
+  if (!env.supabaseUrl) missing.push("EXPO_PUBLIC_SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)")
   else {
     const issue = validateHttpUrlEnv("EXPO_PUBLIC_SUPABASE_URL", env.supabaseUrl)
     if (issue) invalid.push(issue)
   }
 
-  if (!env.supabaseAnonKey) missing.push("EXPO_PUBLIC_SUPABASE_ANON_KEY")
+  if (!env.supabaseAnonKey) missing.push("EXPO_PUBLIC_SUPABASE_ANON_KEY (or NEXT_PUBLIC_SUPABASE_ANON_KEY)")
   else {
     const issue = validateTokenEnv("EXPO_PUBLIC_SUPABASE_ANON_KEY", env.supabaseAnonKey)
     if (issue) invalid.push(issue)
   }
 
-  if (!env.backendUrl) missing.push("EXPO_PUBLIC_BACKEND_URL")
+  if (!env.apiUrl) missing.push("EXPO_PUBLIC_API_URL")
   else {
-    const issue = validateHttpUrlEnv("EXPO_PUBLIC_BACKEND_URL", env.backendUrl)
+    const issue = validateHttpUrlEnv("EXPO_PUBLIC_API_URL", env.apiUrl)
     if (issue) invalid.push(issue)
   }
 

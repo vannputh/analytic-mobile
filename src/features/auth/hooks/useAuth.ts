@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
 import type { Session, User } from "@supabase/supabase-js"
 import { supabase } from "@/src/shared/api/supabase"
+import { getSessionSnapshot } from "@/src/shared/api/session"
 import { backendFetch } from "@/src/shared/api/backend"
 import type { CheckUserResponse } from "@analytics/contracts"
 
@@ -8,6 +9,10 @@ function getErrorMessage(error: unknown): string {
   if (error instanceof Error && error.message) return error.message
   if (typeof error === "string") return error
   return "Unexpected authentication error"
+}
+
+function normalizeEmail(email: string): string {
+  return email.trim().toLowerCase()
 }
 
 function getRetryHint(loweredMessage: string): string {
@@ -28,13 +33,13 @@ function mapAuthError(error: unknown, phase: "requestOtp" | "verifyOtp"): Error 
     return new Error(phase === "requestOtp" ? "Failed to send verification code." : "Failed to verify the code.")
   }
 
-  if (message.includes("Cannot reach backend at")) {
+  if (message.includes("Cannot reach API routes at")) {
     return new Error(message)
   }
 
   if (lowered.includes("server configuration error") || lowered.includes("missing environment variables")) {
     return new Error(
-      "Backend auth is not configured. Add NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY to backend/.env.local, then restart backend."
+      "Auth API is not configured. Add EXPO_PUBLIC_SUPABASE_URL, EXPO_PUBLIC_SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY, then restart Expo."
     )
   }
 
@@ -69,10 +74,15 @@ export function useAuth() {
   useEffect(() => {
     let isMounted = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    void getSessionSnapshot().then(({ session, status }) => {
       if (!isMounted) return
-      setSession(data.session)
-      setUser(data.session?.user ?? null)
+
+      if (status !== "resolved" && typeof __DEV__ !== "undefined" && __DEV__) {
+        console.warn(`[auth] getSessionSnapshot returned ${status} in useAuth`)
+      }
+
+      setSession(session)
+      setUser(session?.user ?? null)
       setLoading(false)
     })
 
@@ -90,9 +100,14 @@ export function useAuth() {
 
   async function requestOtp(email: string, signup: boolean): Promise<void> {
     try {
+      const normalizedEmail = normalizeEmail(email)
+      if (!normalizedEmail) {
+        throw new Error("Email is required")
+      }
+
       const existing = await backendFetch<CheckUserResponse>("/api/auth/check-user", {
         method: "POST",
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email: normalizedEmail }),
         authenticated: false
       })
 
@@ -116,7 +131,7 @@ export function useAuth() {
       }
 
       const { error } = await supabase.auth.signInWithOtp({
-        email,
+        email: normalizedEmail,
         options: {
           shouldCreateUser: signup
         }
@@ -125,7 +140,7 @@ export function useAuth() {
       if (error) throw error
     } catch (error) {
       if (typeof __DEV__ !== "undefined" && __DEV__) {
-        console.error("[auth] requestOtp failed", { email, signup, error })
+        console.error("[auth] requestOtp failed", { email: normalizeEmail(email), signup, error })
       }
       throw mapAuthError(error, "requestOtp")
     }
@@ -133,8 +148,13 @@ export function useAuth() {
 
   async function verifyOtp(email: string, token: string, signup: boolean): Promise<void> {
     try {
+      const normalizedEmail = normalizeEmail(email)
+      if (!normalizedEmail) {
+        throw new Error("Email is required")
+      }
+
       const { error } = await supabase.auth.verifyOtp({
-        email,
+        email: normalizedEmail,
         token,
         type: "email"
       })
@@ -185,7 +205,7 @@ export function useAuth() {
       }
     } catch (error) {
       if (typeof __DEV__ !== "undefined" && __DEV__) {
-        console.error("[auth] verifyOtp failed", { email, signup, error })
+        console.error("[auth] verifyOtp failed", { email: normalizeEmail(email), signup, error })
       }
       throw mapAuthError(error, "verifyOtp")
     }

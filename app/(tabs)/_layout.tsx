@@ -2,7 +2,7 @@ import { useEffect, useState } from "react"
 import { ActivityIndicator, StyleSheet } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { Redirect, Tabs } from "expo-router"
-import { supabase } from "@/src/shared/api/supabase"
+import { getSessionSnapshot } from "@/src/shared/api/session"
 
 export default function TabsLayout() {
   const [loading, setLoading] = useState(true)
@@ -11,9 +11,14 @@ export default function TabsLayout() {
   useEffect(() => {
     let mounted = true
 
-    supabase.auth.getSession().then(({ data }) => {
+    void getSessionSnapshot().then(({ session, status }) => {
       if (!mounted) return
-      setAuthenticated(Boolean(data.session))
+
+      if (status !== "resolved" && typeof __DEV__ !== "undefined" && __DEV__) {
+        console.warn(`[auth] getSessionSnapshot returned ${status} in tabs layout`)
+      }
+
+      setAuthenticated(Boolean(session))
       setLoading(false)
     })
 

@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { Database } from '@/lib/database.types'
+import type { Database } from '@/src/server/database.types'
+import { getServerSupabaseUrl, getSupabaseServiceRoleKey } from '@/src/server/env'
 import type { CheckUserRequest, CheckUserResponse } from "@analytics/contracts"
 
 const USER_LOOKUP_PAGE_SIZE = 200
@@ -11,32 +11,32 @@ function normalizeEmail(email: string): string {
 }
 
 // This route checks if a user exists in Supabase Auth and their approval status
-export async function POST(request: NextRequest) {
+export async function POST(request: Request) {
   try {
     const { email } = (await request.json()) as CheckUserRequest
 
     const normalizedEmail = normalizeEmail(email ?? "")
     if (!normalizedEmail) {
-      return NextResponse.json(
+      return Response.json(
         { error: 'Email is required' },
         { status: 400 }
       )
     }
 
     // Use service role key to access auth.users table
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-    const supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+    const supabaseUrl = getServerSupabaseUrl()
+    const supabaseServiceRoleKey = getSupabaseServiceRoleKey()
 
     if (!supabaseUrl || !supabaseServiceRoleKey) {
       const missingVars = []
-      if (!supabaseUrl) missingVars.push('NEXT_PUBLIC_SUPABASE_URL')
+      if (!supabaseUrl) missingVars.push('EXPO_PUBLIC_SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL)')
       if (!supabaseServiceRoleKey) missingVars.push('SUPABASE_SERVICE_ROLE_KEY')
       
       console.error(`Missing required environment variables: ${missingVars.join(', ')}`)
-      return NextResponse.json(
+      return Response.json(
         { 
           error: 'Server configuration error',
-          details: `Missing environment variables: ${missingVars.join(', ')}. Please check your .env.local file.`
+          details: `Missing environment variables: ${missingVars.join(', ')}.`
         },
         { status: 500 }
       )
@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
 
     if (profileError) {
       console.error('Error checking user profile:', profileError)
-      return NextResponse.json(
+      return Response.json(
         { error: 'Failed to check user profile' },
         { status: 500 }
       )
@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
         approved: profile.status === 'approved',
         status: profile.status
       }
-      return NextResponse.json(payload)
+      return Response.json(payload)
     }
 
     // Fallback for older/migrated accounts that exist in auth but do not have a profile row yet.
@@ -83,7 +83,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         console.error('Error checking auth users:', error)
-        return NextResponse.json(
+        return Response.json(
           { error: 'Failed to check user' },
           { status: 500 }
         )
@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
           approved: false,
           status: 'unknown'
         }
-        return NextResponse.json(payload)
+        return Response.json(payload)
       }
 
       const reachedLastPage =
@@ -108,10 +108,10 @@ export async function POST(request: NextRequest) {
     }
 
     const payload: CheckUserResponse = { exists: false }
-    return NextResponse.json(payload)
+    return Response.json(payload)
   } catch (error) {
     console.error('Error in check-user route:', error)
-    return NextResponse.json(
+    return Response.json(
       { error: 'Internal server error' },
       { status: 500 }
     )

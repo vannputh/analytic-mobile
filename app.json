@@ -19,7 +19,7 @@
       "package": "com.analytics.mobile"
     },
     "extra": {
-      "backendUrl": "http://localhost:3000"
+      "apiUrl": "http://puths-book.local:8081"
     }
   }
 }

@@ -1,8 +1,7 @@
-# Backend Mobile Auth Notes
+# API Route Auth Notes
 
-Protected endpoints now support either:
+Protected endpoints require:
 
-- Supabase cookie session (legacy compatibility)
 - `Authorization: Bearer <supabase_access_token>`
 
 ## Protected endpoints
