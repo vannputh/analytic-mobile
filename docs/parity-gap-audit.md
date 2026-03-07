@@ -2,6 +2,7 @@
 
 ## Completed In This Pass
 
+- `Media`: `+` route now uses the same native tabbed editor model as the richer edit flow, including metadata match, poster upload, advanced fields, episodes, and status history parity structure.
 - `Media`: file-based CSV/TSV/TXT import flow (`expo-document-picker`) with clean preview, batch metadata enrichment, import results summary.
 - `Food`: item editor workflow (add/edit/remove item rows), item-level image upload into item records, copy actions (address/maps URL) in details modal.
 - `Food`: details tab now renders item image thumbnails and category metadata.

@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react"
-import { Pressable, StyleSheet, Text, View } from "react-native"
-import { SafeAreaView } from "react-native-safe-area-context"
+import { Text, View } from "react-native"
 import { useRouter } from "expo-router"
+import { useSafeAreaInsets } from "react-native-safe-area-context"
 import { supabase } from "@/src/shared/api/supabase"
+import { SegmentedSwitch } from "@/src/shared/components/workspace/SegmentedSwitch"
 import { useAuth } from "@/src/features/auth/hooks/useAuth"
-import { useAppTheme } from "@/src/shared/theme/ThemeProvider"
+import { GroupedSection } from "@/src/shared/components/native/grouped-section"
+import { ScreenScrollView } from "@/src/shared/components/native/screen-scroll-view"
+import { SettingsRow } from "@/src/shared/components/native/settings-row"
+import { useAppTheme, type AppTheme } from "@/src/shared/theme/ThemeProvider"
 
 interface ProfileState {
   email: string
@@ -14,8 +18,9 @@ interface ProfileState {
 
 export function ProfileScreen() {
   const router = useRouter()
+  const insets = useSafeAreaInsets()
   const { signOut } = useAuth()
-  const { theme, palette, toggleTheme, ready } = useAppTheme()
+  const { theme, resolvedTheme, palette, setTheme, ready } = useAppTheme()
   const [profile, setProfile] = useState<ProfileState>({
     email: "",
     status: "unknown",
@@ -24,6 +29,7 @@ export function ProfileScreen() {
 
   useEffect(() => {
     let mounted = true
+
     async function loadProfile() {
       const { data: authData } = await supabase.auth.getUser()
       const user = authData.user
@@ -44,63 +50,74 @@ export function ProfileScreen() {
       })
     }
 
-    loadProfile()
+    void loadProfile()
     return () => {
       mounted = false
     }
   }, [])
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: palette.background }]}>
-      <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-        <Text style={[styles.title, { color: palette.text }]}>Profile</Text>
-        <Text style={[styles.label, { color: palette.textMuted }]}>Email</Text>
-        <Text style={[styles.value, { color: palette.text }]}>{profile.email || "No user"}</Text>
+    <ScreenScrollView contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 16, paddingBottom: 24 + insets.bottom, gap: 20 }}>
+      <View style={{ gap: 4 }}>
+        <Text selectable style={{ color: palette.text, fontSize: 34, fontWeight: "700", letterSpacing: -0.6 }}>
+          Profile
+        </Text>
+        <Text selectable style={{ color: palette.textMuted, fontSize: 15 }}>
+          Account settings, appearance, and workspace tools.
+        </Text>
+      </View>
 
-        <Text style={[styles.label, { color: palette.textMuted }]}>Access</Text>
-        <Text style={[styles.value, { color: palette.text }]}>{profile.status}</Text>
+      <GroupedSection title="Account">
+        <SettingsRow title="Email" value={profile.email || "No user"} />
+        <SettingsRow title="Access" value={profile.status} />
+        <SettingsRow title="Role" value={profile.isAdmin ? "Admin" : "User"} />
+      </GroupedSection>
 
-        <Text style={[styles.label, { color: palette.textMuted }]}>Role</Text>
-        <Text style={[styles.value, { color: palette.text }]}>{profile.isAdmin ? "Admin" : "User"}</Text>
+      <View style={{ gap: 10 }}>
+        <Text selectable style={{ color: palette.textMuted, fontSize: 13, fontWeight: "600", paddingHorizontal: 4 }}>
+          Appearance
+        </Text>
+        <SegmentedSwitch<AppTheme>
+          value={theme}
+          onChange={(next) => {
+            void setTheme(next)
+          }}
+          options={[
+            { value: "system", label: "System" },
+            { value: "light", label: "Light" },
+            { value: "dark", label: "Dark" }
+          ]}
+        />
+        <Text selectable style={{ color: palette.textMuted, fontSize: 12, paddingHorizontal: 4 }}>
+          Currently using {resolvedTheme} appearance.
+        </Text>
+      </View>
 
-        <Pressable
-          style={[styles.buttonSecondary, { backgroundColor: palette.surfaceMuted, borderColor: palette.border }]}
-          onPress={toggleTheme}
-          disabled={!ready}
-        >
-          <Text style={[styles.buttonSecondaryText, { color: palette.text }]}>
-            Theme: {theme === "dark" ? "Dark" : "Light"} (Tap to toggle)
-          </Text>
-        </Pressable>
+      <GroupedSection title="Tools">
+        <SettingsRow
+          title="Analytics"
+          subtitle="Open the cross-workspace dashboard."
+          onPress={() => router.push("/analytics")}
+        />
+        {profile.isAdmin ? (
+          <SettingsRow
+            title="Admin Console"
+            subtitle="Review requests and manage users."
+            onPress={() => router.push("/admin")}
+          />
+        ) : null}
+      </GroupedSection>
 
-        <Pressable
-          style={[styles.button, { backgroundColor: palette.primary }]}
+      <GroupedSection title="Session">
+        <SettingsRow
+          title={ready ? "Sign Out" : "Loading Theme..."}
+          destructive
           onPress={async () => {
             await signOut()
             router.replace("/(auth)/login")
           }}
-        >
-          <Text style={[styles.buttonText, { color: palette.primaryText }]}>Sign out</Text>
-        </Pressable>
-      </View>
-    </SafeAreaView>
+        />
+      </GroupedSection>
+    </ScreenScrollView>
   )
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16 },
-  card: { borderWidth: 1, borderRadius: 16, padding: 16, gap: 8 },
-  title: { fontSize: 24, fontWeight: "700", marginBottom: 4 },
-  label: { fontSize: 12 },
-  value: { fontSize: 15, fontWeight: "600", marginBottom: 4 },
-  buttonSecondary: {
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 12,
-    alignItems: "center",
-    marginTop: 6
-  },
-  buttonSecondaryText: { fontWeight: "700" },
-  button: { borderRadius: 10, paddingVertical: 12, alignItems: "center", marginTop: 4 },
-  buttonText: { fontWeight: "700" }
-})

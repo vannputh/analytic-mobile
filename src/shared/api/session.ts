@@ -1,5 +1,5 @@
 import type { Session } from "@supabase/supabase-js"
-import { supabase } from "@/src/shared/api/supabase"
+import { getSupabaseInitializationError, supabase } from "@/src/shared/api/supabase"
 
 export type SessionSnapshotStatus = "resolved" | "timeout" | "error"
 
@@ -11,6 +11,13 @@ interface SessionSnapshotResult {
 const DEFAULT_SESSION_TIMEOUT_MS = 6000
 
 export async function getSessionSnapshot(timeoutMs = DEFAULT_SESSION_TIMEOUT_MS): Promise<SessionSnapshotResult> {
+  if (getSupabaseInitializationError()) {
+    return {
+      session: null,
+      status: "error"
+    }
+  }
+
   let timeoutId: ReturnType<typeof setTimeout> | undefined
 
   try {

@@ -5,7 +5,7 @@
 | Domain | Flow | Target RN Screen | Status |
 | --- | --- | --- | --- |
 | Auth | Request access + OTP login + pending/rejected handling | `/(auth)/login` | Implemented |
-| Media | List/search/create/delete/edit + metadata + episode history + watch-this + finished-today | `/(tabs)/media` | Implemented (major parity) |
+| Media | List/search/create/delete/edit + metadata + episode history + watch-this + finished-today | `/(tabs)/media` | Implemented (major parity, shared native tabbed editor for `+` and edit flows) |
 | Media | Import (paste + file picker + clean preview + enrichment + import summary) | `/(tabs)/media` | Implemented |
 | Food | Calendar diary + add/edit tabs + maps autofill + images + details tabs | `/(tabs)/food` | Implemented (major parity) |
 | Food | Item-level image behavior + copy actions in details | `/(tabs)/food` | Implemented |

@@ -104,12 +104,26 @@ function resolveApiUrl(rawValue: string): string {
   return parsed.toString().replace(/\/$/, "")
 }
 
-const configuredApiUrl =
+function shouldPreferExpoRuntimeApiUrl(): boolean {
+  const isDev = typeof __DEV__ !== "undefined" ? __DEV__ : process.env.NODE_ENV !== "production"
+  if (!isDev) return false
+  if (Platform.OS === "web") return false
+  return Boolean(getExpoRuntimeOrigin())
+}
+
+const explicitApiUrl =
   getEnvValue("EXPO_PUBLIC_API_URL")
-  ?? getEnvValue("EXPO_PUBLIC_BACKEND_URL")
+  ?? ""
+
+const legacyApiUrl =
+  getEnvValue("EXPO_PUBLIC_BACKEND_URL")
   ?? getExtraValue("apiUrl")
   ?? getExtraValue("backendUrl")
   ?? ""
+
+const configuredApiUrl = shouldPreferExpoRuntimeApiUrl()
+  ? ""
+  : (explicitApiUrl || legacyApiUrl)
 
 const resolvedApiUrl = resolveApiUrl(configuredApiUrl)
 
@@ -166,7 +180,7 @@ function validateTokenEnv(key: string, value: string): string | null {
   return null
 }
 
-export function assertEnv(): void {
+function getEnvErrors(): string[] {
   const missing: string[] = []
   const invalid: string[] = []
 
@@ -198,7 +212,19 @@ export function assertEnv(): void {
     errors.push(`Invalid environment variables:\n- ${invalid.join("\n- ")}`)
   }
 
-  if (errors.length > 0) {
-    throw new Error(errors.join("\n"))
+  return errors
+}
+
+export function getClientEnvError(): Error | null {
+  const errors = getEnvErrors()
+  if (errors.length === 0) return null
+  return new Error(errors.join("\n"))
+}
+
+export function assertEnv(): void {
+  const error = getClientEnvError()
+
+  if (error) {
+    throw error
   }
 }

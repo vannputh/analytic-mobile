@@ -12,9 +12,14 @@ import {
   View
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
+import { useRouter } from "expo-router"
 import * as Clipboard from "expo-clipboard"
 import * as ImagePicker from "expo-image-picker"
+import { FoodAnalyticsPanel } from "@/src/features/analytics/components/FoodAnalyticsPanel"
 import { useFoodEntries } from "@/src/features/food/hooks/useFoodEntries"
+import { NativeDateField } from "@/src/shared/components/native/native-date-field"
+import { SegmentedSwitch } from "@/src/shared/components/workspace/SegmentedSwitch"
+import { WorkspaceHeader } from "@/src/shared/components/workspace/WorkspaceHeader"
 import { backendFetch } from "@/src/shared/api/backend"
 import { uploadAssetToBackend } from "@/src/shared/api/upload"
 import { useAppTheme } from "@/src/shared/theme/ThemeProvider"
@@ -78,6 +83,7 @@ interface CalendarCell {
 
 type FormTab = "general" | "location" | "items" | "ratings" | "notes"
 type DetailTab = "overview" | "details" | "notes"
+type FoodWorkspaceMode = "diary" | "analytics"
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
@@ -271,6 +277,7 @@ function foodTotal(entry: FoodEntry): number {
 }
 
 export function FoodScreen() {
+  const router = useRouter()
   const { palette } = useAppTheme()
   const {
     data,
@@ -293,6 +300,7 @@ export function FoodScreen() {
   const [currentMonth, setCurrentMonth] = useState(today.getMonth())
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [search, setSearch] = useState("")
+  const [workspaceMode, setWorkspaceMode] = useState<FoodWorkspaceMode>("diary")
 
   const [modalOpen, setModalOpen] = useState(false)
   const [formTab, setFormTab] = useState<FormTab>("general")
@@ -775,119 +783,146 @@ export function FoodScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: palette.background }]}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.header}>
-          <Text style={[styles.title, { color: palette.text }]}>Food Diary</Text>
-          <TextInput
-            style={[styles.input, themedInput(palette)]}
-            value={search}
-            onChangeText={setSearch}
-            placeholder="Search place, city, cuisine"
-            placeholderTextColor={palette.textMuted}
-          />
-
-          <View style={styles.inlineRow}>
-            <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={goToPreviousMonth}>
-              <Text style={{ color: palette.text }}>Prev</Text>
-            </Pressable>
-            <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={goToToday}>
-              <Text style={{ color: palette.text }}>Today</Text>
-            </Pressable>
-            <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={goToNextMonth}>
-              <Text style={{ color: palette.text }}>Next</Text>
-            </Pressable>
-          </View>
-
-          <Text style={[styles.monthTitle, { color: palette.text }]}>{formatMonthYear(currentYear, currentMonth)}</Text>
-          <Pressable style={[styles.primaryButton, { backgroundColor: palette.primary }]} onPress={() => openCreate(selectedDate ?? undefined)}>
-            <Text style={[styles.primaryButtonText, { color: palette.primaryText }]}>Add Entry</Text>
+      <View style={styles.workspaceShell}>
+        <WorkspaceHeader badge="diary" title="Food" subtitle="Track meals and trends">
+          <Pressable
+            style={[styles.workspaceAction, { borderColor: palette.border, backgroundColor: palette.surface }]}
+            onPress={() => router.push("/ai?workspace=food")}
+          >
+            <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>AI</Text>
           </Pressable>
+          <Pressable
+            style={[styles.workspaceAction, { borderColor: palette.border, backgroundColor: palette.surface }]}
+            onPress={() => openCreate(selectedDate ?? undefined)}
+          >
+            <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>+ Entry</Text>
+          </Pressable>
+        </WorkspaceHeader>
+        <SegmentedSwitch
+          value={workspaceMode}
+          onChange={setWorkspaceMode}
+          options={[
+            { value: "diary", label: "diary" },
+            { value: "analytics", label: "analytics" }
+          ]}
+        />
+      </View>
 
-          {message ? <Text style={[styles.message, { color: palette.primary }]}>{message}</Text> : null}
-          {isLoading ? <ActivityIndicator color={palette.primary} /> : null}
-          {error instanceof Error ? <Text style={[styles.error, { color: palette.danger }]}>{error.message}</Text> : null}
-        </View>
+      {workspaceMode === "diary" ? (
+        <ScrollView contentContainerStyle={styles.content}>
+          <View style={styles.header}>
+            <TextInput
+              style={[styles.input, themedInput(palette)]}
+              value={search}
+              onChangeText={setSearch}
+              placeholder="Search place, city, cuisine"
+              placeholderTextColor={palette.textMuted}
+            />
 
-        <View style={[styles.calendar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-          <View style={[styles.weekdayRow, { borderColor: palette.border }]}>
-            {WEEKDAYS.map((weekday) => (
-              <Text key={weekday} style={[styles.weekdayLabel, { color: palette.textMuted }]}>{weekday}</Text>
-            ))}
+            <View style={styles.inlineRow}>
+              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={goToPreviousMonth}>
+                <Text style={{ color: palette.text }}>Prev</Text>
+              </Pressable>
+              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={goToToday}>
+                <Text style={{ color: palette.text }}>Today</Text>
+              </Pressable>
+              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={goToNextMonth}>
+                <Text style={{ color: palette.text }}>Next</Text>
+              </Pressable>
+            </View>
+
+            <Text style={[styles.monthTitle, { color: palette.text }]}>{formatMonthYear(currentYear, currentMonth)}</Text>
+
+            {message ? <Text style={[styles.message, { color: palette.primary }]}>{message}</Text> : null}
+            {isLoading ? <ActivityIndicator color={palette.primary} /> : null}
+            {error instanceof Error ? <Text style={[styles.error, { color: palette.danger }]}>{error.message}</Text> : null}
           </View>
-          <View style={styles.calendarGrid}>
-            {calendarCells.map((cell) => {
-              const count = (entriesByDate[cell.date] ?? []).length
-              const isSelected = selectedDate === cell.date
-              return (
-                <Pressable
-                  key={cell.date}
-                  style={[
-                    styles.calendarCell,
-                    { borderColor: palette.border },
-                    !cell.isCurrentMonth && { backgroundColor: palette.surfaceMuted },
-                    cell.isToday && { borderColor: palette.primary, borderWidth: 1 },
-                    isSelected && { backgroundColor: palette.surfaceMuted }
-                  ]}
-                  onPress={() => setSelectedDate((prev) => (prev === cell.date ? null : cell.date))}
-                >
-                  <Text style={[styles.calendarDay, { color: cell.isCurrentMonth ? palette.text : palette.textMuted }]}>{cell.day}</Text>
-                  {count > 0 ? (
-                    <View style={[styles.countBadge, { backgroundColor: palette.primary }]}>
-                      <Text style={[styles.countText, { color: palette.primaryText }]}>{count}</Text>
+
+          <View style={[styles.calendar, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+            <View style={[styles.weekdayRow, { borderColor: palette.border }]}>
+              {WEEKDAYS.map((weekday) => (
+                <Text key={weekday} style={[styles.weekdayLabel, { color: palette.textMuted }]}>{weekday}</Text>
+              ))}
+            </View>
+            <View style={styles.calendarGrid}>
+              {calendarCells.map((cell) => {
+                const count = (entriesByDate[cell.date] ?? []).length
+                const isSelected = selectedDate === cell.date
+                return (
+                  <Pressable
+                    key={cell.date}
+                    style={[
+                      styles.calendarCell,
+                      { borderColor: palette.border },
+                      !cell.isCurrentMonth && { backgroundColor: palette.surfaceMuted },
+                      cell.isToday && { borderColor: palette.primary, borderWidth: 1 },
+                      isSelected && { backgroundColor: palette.surfaceMuted }
+                    ]}
+                    onPress={() => setSelectedDate((prev) => (prev === cell.date ? null : cell.date))}
+                  >
+                    <Text style={[styles.calendarDay, { color: cell.isCurrentMonth ? palette.text : palette.textMuted }]}>{cell.day}</Text>
+                    {count > 0 ? (
+                      <View style={[styles.countBadge, { backgroundColor: palette.primary }]}>
+                        <Text style={[styles.countText, { color: palette.primaryText }]}>{count}</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                )
+              })}
+            </View>
+          </View>
+
+          <View style={styles.resultsHeader}>
+            <Text style={[styles.resultsTitle, { color: palette.text }]}>
+              {selectedDate ? `Entries for ${selectedDate}` : `All Entries (${selectedEntries.length})`}
+            </Text>
+            {selectedDate ? (
+              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => openCreate(selectedDate)}>
+                <Text style={{ color: palette.text }}>Add for Day</Text>
+              </Pressable>
+            ) : null}
+          </View>
+
+          {selectedEntries.length === 0 ? (
+            <Text style={[styles.empty, { color: palette.textMuted }]}>No entries in this view.</Text>
+          ) : (
+            selectedEntries.map((entry) => (
+              <View key={entry.id} style={[styles.entryCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
+                <View style={styles.entryMain}>
+                  {entry.primary_image_url ? (
+                    <Image source={{ uri: entry.primary_image_url }} style={styles.entryImage} />
+                  ) : (
+                    <View style={[styles.entryImage, styles.entryImageFallback]}>
+                      <Text style={[styles.entryImageFallbackText, { color: palette.textMuted }]}>No Photo</Text>
                     </View>
-                  ) : null}
-                </Pressable>
-              )
-            })}
-          </View>
-        </View>
-
-        <View style={styles.resultsHeader}>
-          <Text style={[styles.resultsTitle, { color: palette.text }]}>
-            {selectedDate ? `Entries for ${selectedDate}` : `All Entries (${selectedEntries.length})`}
-          </Text>
-          {selectedDate ? (
-            <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => openCreate(selectedDate)}>
-              <Text style={{ color: palette.text }}>Add for Day</Text>
-            </Pressable>
-          ) : null}
-        </View>
-
-        {selectedEntries.length === 0 ? (
-          <Text style={[styles.empty, { color: palette.textMuted }]}>No entries in this view.</Text>
-        ) : (
-          selectedEntries.map((entry) => (
-            <View key={entry.id} style={[styles.entryCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <View style={styles.entryMain}>
-                {entry.primary_image_url ? (
-                  <Image source={{ uri: entry.primary_image_url }} style={styles.entryImage} />
-                ) : (
-                  <View style={[styles.entryImage, styles.entryImageFallback]}>
-                    <Text style={[styles.entryImageFallbackText, { color: palette.textMuted }]}>No Photo</Text>
+                  )}
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.entryName, { color: palette.text }]}>{entry.branch ? `${entry.name} - ${entry.branch}` : entry.name}</Text>
+                    <Text style={[styles.entryMeta, { color: palette.textMuted }]}>{formatVisitDate(entry.visit_date)} • {entry.city ?? "-"}</Text>
+                    <Text style={[styles.entryMeta, { color: palette.textMuted }]}>Rating: {entry.overall_rating ?? "-"} • Total: ${foodTotal(entry).toFixed(2)}</Text>
                   </View>
-                )}
-                <View style={{ flex: 1 }}>
-                  <Text style={[styles.entryName, { color: palette.text }]}>{entry.branch ? `${entry.name} - ${entry.branch}` : entry.name}</Text>
-                  <Text style={[styles.entryMeta, { color: palette.textMuted }]}>{formatVisitDate(entry.visit_date)} • {entry.city ?? "-"}</Text>
-                  <Text style={[styles.entryMeta, { color: palette.textMuted }]}>Rating: {entry.overall_rating ?? "-"} • Total: ${foodTotal(entry).toFixed(2)}</Text>
+                </View>
+
+                <View style={styles.inlineRow}>
+                  <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => openDetails(entry)}>
+                    <Text style={{ color: palette.text }}>Details</Text>
+                  </Pressable>
+                  <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => openDuplicate(entry)}>
+                    <Text style={{ color: palette.text }}>Log Again</Text>
+                  </Pressable>
+                  <Pressable style={styles.dangerButton} onPress={() => handleDeleteEntry(entry.id)}>
+                    <Text style={styles.dangerButtonText}>Delete</Text>
+                  </Pressable>
                 </View>
               </View>
-
-              <View style={styles.inlineRow}>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => openDetails(entry)}>
-                  <Text style={{ color: palette.text }}>Details</Text>
-                </Pressable>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => openDuplicate(entry)}>
-                  <Text style={{ color: palette.text }}>Log Again</Text>
-                </Pressable>
-                <Pressable style={styles.dangerButton} onPress={() => handleDeleteEntry(entry.id)}>
-                  <Text style={styles.dangerButtonText}>Delete</Text>
-                </Pressable>
-              </View>
-            </View>
-          ))
-        )}
-      </ScrollView>
+            ))
+          )}
+        </ScrollView>
+      ) : (
+        <ScrollView contentContainerStyle={styles.analyticsContent}>
+          <FoodAnalyticsPanel entries={data ?? []} />
+        </ScrollView>
+      )}
 
       <Modal visible={modalOpen && Boolean(formState)} animationType="slide" onRequestClose={closeFormModal}>
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: palette.background }]}>
@@ -932,7 +967,11 @@ export function FoodScreen() {
                     </View>
                   ) : null}
                   <TextInput style={[styles.input, themedInput(palette)]} value={formState.branch} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, branch: value } : prev))} placeholder="Branch" placeholderTextColor={palette.textMuted} />
-                  <TextInput style={[styles.input, themedInput(palette)]} value={formState.visitDate} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, visitDate: value } : prev))} placeholder="Visit date (YYYY-MM-DD)" placeholderTextColor={palette.textMuted} />
+                  <NativeDateField
+                    label="Visit Date"
+                    value={formState.visitDate}
+                    onChange={(value) => setFormState((prev) => (prev ? { ...prev, visitDate: value } : prev))}
+                  />
                   <TextInput style={[styles.input, themedInput(palette)]} value={formState.category} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, category: value } : prev))} placeholder="Category" placeholderTextColor={palette.textMuted} />
                   <TextInput style={[styles.input, themedInput(palette)]} value={formState.cuisineTypes} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, cuisineTypes: value } : prev))} placeholder="Cuisine types (comma-separated)" placeholderTextColor={palette.textMuted} />
                   <TextInput style={[styles.input, themedInput(palette)]} value={formState.tags} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, tags: value } : prev))} placeholder="Tags (comma-separated)" placeholderTextColor={palette.textMuted} />
@@ -1269,7 +1308,18 @@ function themedBorder(palette: ReturnType<typeof useAppTheme>["palette"]) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  workspaceShell: { paddingHorizontal: 16, paddingTop: 12, gap: 10 },
+  workspaceAction: {
+    borderWidth: 1,
+    borderRadius: 10,
+    minWidth: 62,
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 10
+  },
   content: { padding: 16, gap: 14, paddingBottom: 28 },
+  analyticsContent: { padding: 16, gap: 12, paddingBottom: 36 },
   header: { gap: 10 },
   title: { fontSize: 24, fontWeight: "700" },
   monthTitle: { fontSize: 18, fontWeight: "700" },

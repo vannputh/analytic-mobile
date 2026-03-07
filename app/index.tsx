@@ -1,45 +1,27 @@
 import { useEffect, useRef, useState } from "react"
 import { Redirect } from "expo-router"
-import { Animated, Easing, Platform, StyleSheet, Text } from "react-native"
+import { ActivityIndicator, Animated, Easing, StyleSheet, Text } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { getSessionSnapshot } from "@/src/shared/api/session"
+import { useAuth } from "@/src/features/auth/hooks/useAuth"
+import { MONO_FONT_FAMILY } from "@/src/shared/theme/typography"
 
 const OPENING_MIN_DURATION_MS = 1100
-const MONO_FONT_FAMILY = Platform.select({
-  ios: "Menlo",
-  android: "monospace",
-  default: "monospace"
-})
 
 export default function IndexScreen() {
-  const [sessionResolved, setSessionResolved] = useState(false)
+  const { loading, session } = useAuth()
   const [requiresOpening, setRequiresOpening] = useState(false)
   const [openingDone, setOpeningDone] = useState(false)
-  const [authenticated, setAuthenticated] = useState(false)
   const textOpacity = useRef(new Animated.Value(0)).current
+  const authenticated = Boolean(session)
 
   useEffect(() => {
-    let mounted = true
+    if (loading) return
 
-    void getSessionSnapshot().then(({ session, status }) => {
-      if (!mounted) return
-
-      if (status !== "resolved" && typeof __DEV__ !== "undefined" && __DEV__) {
-        console.warn(`[auth] getSessionSnapshot returned ${status} on app entry`)
-      }
-
-      const hasSession = Boolean(session)
-      setAuthenticated(hasSession)
-      if (!hasSession) {
-        setRequiresOpening(true)
-      }
-      setSessionResolved(true)
-    })
-
-    return () => {
-      mounted = false
+    setRequiresOpening(!authenticated)
+    if (authenticated) {
+      setOpeningDone(true)
     }
-  }, [])
+  }, [authenticated, loading])
 
   useEffect(() => {
     if (!requiresOpening) return
@@ -75,8 +57,13 @@ export default function IndexScreen() {
     return () => animation.stop()
   }, [requiresOpening, textOpacity])
 
-  if (!sessionResolved) {
-    return <SafeAreaView style={styles.opening} />
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.opening}>
+        <Text style={styles.brand}>analytic</Text>
+        <ActivityIndicator color="#000000" style={styles.spinner} />
+      </SafeAreaView>
+    )
   }
 
   if (requiresOpening && !openingDone) {
@@ -97,7 +84,8 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#ffffff"
+    backgroundColor: "#ffffff",
+    gap: 16
   },
   brand: {
     color: "#000000",
@@ -107,5 +95,8 @@ const styles = StyleSheet.create({
     lineHeight: 30,
     letterSpacing: -0.2,
     fontWeight: "700"
+  },
+  spinner: {
+    marginTop: 4
   }
 })

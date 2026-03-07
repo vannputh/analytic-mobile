@@ -1,53 +1,83 @@
-import { useEffect, useState } from "react"
+import Ionicons from "@expo/vector-icons/Ionicons"
+import { Redirect } from "expo-router"
+import { Icon, Label, NativeTabs, VectorIcon } from "expo-router/unstable-native-tabs"
 import { ActivityIndicator, StyleSheet } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { Redirect, Tabs } from "expo-router"
-import { getSessionSnapshot } from "@/src/shared/api/session"
+import { useAuth } from "@/src/features/auth/hooks/useAuth"
+import { useAppTheme } from "@/src/shared/theme/ThemeProvider"
 
 export default function TabsLayout() {
-  const [loading, setLoading] = useState(true)
-  const [authenticated, setAuthenticated] = useState(false)
-
-  useEffect(() => {
-    let mounted = true
-
-    void getSessionSnapshot().then(({ session, status }) => {
-      if (!mounted) return
-
-      if (status !== "resolved" && typeof __DEV__ !== "undefined" && __DEV__) {
-        console.warn(`[auth] getSessionSnapshot returned ${status} in tabs layout`)
-      }
-
-      setAuthenticated(Boolean(session))
-      setLoading(false)
-    })
-
-    return () => {
-      mounted = false
-    }
-  }, [])
+  const { loading, session } = useAuth()
+  const { palette } = useAppTheme()
 
   if (loading) {
     return (
-      <SafeAreaView style={styles.loading}>
-        <ActivityIndicator />
+      <SafeAreaView style={[styles.loading, { backgroundColor: palette.background }]}>
+        <ActivityIndicator color={palette.primary} />
       </SafeAreaView>
     )
   }
 
-  if (!authenticated) {
+  if (!session) {
     return <Redirect href="/(auth)/login" />
   }
 
   return (
-    <Tabs screenOptions={{ headerShown: false }}>
-      <Tabs.Screen name="media" options={{ title: "Media" }} />
-      <Tabs.Screen name="food" options={{ title: "Food" }} />
-      <Tabs.Screen name="analytics" options={{ title: "Analytics" }} />
-      <Tabs.Screen name="ai" options={{ title: "AI" }} />
-      <Tabs.Screen name="admin" options={{ title: "Admin" }} />
-      <Tabs.Screen name="profile" options={{ title: "Profile" }} />
-    </Tabs>
+    <NativeTabs
+      tintColor={palette.primary}
+      iconColor={{
+        default: palette.textMuted,
+        selected: palette.primary
+      }}
+      labelStyle={{
+        default: {
+          color: palette.textMuted,
+          fontSize: 11,
+          fontWeight: "600"
+        },
+        selected: {
+          color: palette.primary,
+          fontSize: 11,
+          fontWeight: "600"
+        }
+      }}
+      backgroundColor={palette.surface}
+      shadowColor={palette.border}
+      blurEffect="systemChromeMaterial"
+      disableTransparentOnScrollEdge
+      minimizeBehavior="onScrollDown"
+    >
+      <NativeTabs.Trigger name="media">
+        <Label>Media</Label>
+        <Icon
+          sf={{ default: "play.circle", selected: "play.circle.fill" }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="play-circle-outline" />,
+            selected: <VectorIcon family={Ionicons} name="play-circle" />
+          }}
+        />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="food">
+        <Label>Food</Label>
+        <Icon
+          sf={{ default: "fork.knife.circle", selected: "fork.knife.circle.fill" }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="restaurant-outline" />,
+            selected: <VectorIcon family={Ionicons} name="restaurant" />
+          }}
+        />
+      </NativeTabs.Trigger>
+      <NativeTabs.Trigger name="profile">
+        <Label>Profile</Label>
+        <Icon
+          sf={{ default: "person.crop.circle", selected: "person.crop.circle.fill" }}
+          androidSrc={{
+            default: <VectorIcon family={Ionicons} name="person-circle-outline" />,
+            selected: <VectorIcon family={Ionicons} name="person-circle" />
+          }}
+        />
+      </NativeTabs.Trigger>
+    </NativeTabs>
   )
 }
 

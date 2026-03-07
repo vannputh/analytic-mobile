@@ -2,11 +2,17 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { supabase } from "@/src/shared/api/supabase"
 import type { MediaEntry, MediaStatusHistory } from "@/src/shared/types/database"
 
-export function useMediaEntries() {
+interface UseMediaEntriesOptions {
+  enabled?: boolean
+}
+
+export function useMediaEntries(options: UseMediaEntriesOptions = {}) {
+  const { enabled = true } = options
   const queryClient = useQueryClient()
 
   const query = useQuery({
     queryKey: ["media-entries"],
+    enabled,
     queryFn: async (): Promise<MediaEntry[]> => {
       const { data, error } = await supabase
         .from("media_entries")

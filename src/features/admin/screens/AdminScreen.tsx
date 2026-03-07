@@ -21,6 +21,7 @@ import {
   fetchAdminUsers,
   rejectAdminUser
 } from "@/src/features/admin/api/adminApi"
+import { SegmentedSwitch } from "@/src/shared/components/workspace/SegmentedSwitch"
 import { useAppTheme } from "@/src/shared/theme/ThemeProvider"
 
 type AdminTab = "dashboard" | "requests" | "users"
@@ -189,43 +190,23 @@ export function AdminScreen() {
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: palette.background }]}>
-      <Text style={[styles.title, { color: palette.text }]}>Admin</Text>
-
-      <View style={styles.tabRow}>
-        <TabButton label="Dashboard" active={tab === "dashboard"} onPress={() => setTab("dashboard")} palette={palette} />
-        <TabButton label="Requests" active={tab === "requests"} onPress={() => setTab("requests")} palette={palette} />
-        <TabButton label="Users" active={tab === "users"} onPress={() => setTab("users")} palette={palette} />
+      <View style={styles.topBlock}>
+        <Text style={[styles.subtitle, { color: palette.textMuted }]}>
+          Review requests and manage users with native navigation chrome and grouped lists.
+        </Text>
+        <SegmentedSwitch<AdminTab>
+          value={tab}
+          onChange={setTab}
+          options={[
+            { value: "dashboard", label: "Dashboard" },
+            { value: "requests", label: "Requests" },
+            { value: "users", label: "Users" }
+          ]}
+        />
       </View>
 
       {content}
     </SafeAreaView>
-  )
-}
-
-function TabButton({
-  label,
-  active,
-  onPress,
-  palette
-}: {
-  label: string
-  active: boolean
-  onPress: () => void
-  palette: ReturnType<typeof useAppTheme>["palette"]
-}) {
-  return (
-    <Pressable
-      style={[
-        styles.tabButton,
-        {
-          borderColor: palette.border,
-          backgroundColor: active ? palette.primary : palette.surface
-        }
-      ]}
-      onPress={onPress}
-    >
-      <Text style={{ color: active ? palette.primaryText : palette.text, fontWeight: "700" }}>{label}</Text>
-    </Pressable>
   )
 }
 
@@ -287,15 +268,8 @@ function themedInput(palette: ReturnType<typeof useAppTheme>["palette"]) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
-  title: { fontSize: 26, fontWeight: "700" },
-  tabRow: { flexDirection: "row", gap: 8 },
-  tabButton: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingVertical: 10,
-    alignItems: "center"
-  },
+  topBlock: { gap: 12 },
+  subtitle: { fontSize: 14, lineHeight: 20 },
   cardsGrid: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
   card: {
     width: "48%",

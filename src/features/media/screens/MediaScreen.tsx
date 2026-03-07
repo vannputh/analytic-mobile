@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Ionicons } from "@expo/vector-icons"
+import { useFocusEffect } from "@react-navigation/native"
+import { Image } from "expo-image"
+import { Stack, useRouter } from "expo-router"
 import {
   ActivityIndicator,
-  Image,
   Modal,
   Pressable,
   ScrollView,
-  SectionList,
   StyleSheet,
   Text,
   TextInput,
@@ -15,45 +17,42 @@ import { SafeAreaView } from "react-native-safe-area-context"
 import * as DocumentPicker from "expo-document-picker"
 import * as FileSystem from "expo-file-system"
 import * as ImagePicker from "expo-image-picker"
+import { MediaEditorContent } from "@/src/features/media/components/media-editor-content"
+import { MediaEntryRow } from "@/src/features/media/components/media-entry-row"
+import { MediaFilterStrip } from "@/src/features/media/components/media-filter-strip"
+import { MediaHeaderActions } from "@/src/features/media/components/media-header-actions"
+import { MediaMetadataConflictModal } from "@/src/features/media/components/media-metadata-conflict-modal"
+import { MediaOverflowSheet } from "@/src/features/media/components/media-overflow-sheet"
+import { MediaSelectionToolbar } from "@/src/features/media/components/media-selection-toolbar"
+import { MediaWatchingShelf } from "@/src/features/media/components/media-watching-shelf"
+import { MediaAnalyticsPanel } from "@/src/features/analytics/components/MediaAnalyticsPanel"
 import { useMediaEntries } from "@/src/features/media/hooks/useMediaEntries"
+import { consumePendingMediaFlashMessage } from "@/src/features/media/lib/media-flash-message"
+import {
+  addEpisodeToDraft,
+  applyMetadataSelection,
+  buildMediaEditorDraft,
+  buildMediaEntryPayloadFromDraft,
+  buildMetadataSelectionFromDraft,
+  deleteEpisodeHistoryItem,
+  markFinishedTodayInDraft,
+  parseEpisodeHistory,
+  updateEpisodeHistoryDate,
+  type MediaEditorDraft,
+  type MediaEditorTab,
+  type MediaMetadataConflictField,
+  type PendingMediaMetadataSelection
+} from "@/src/features/media/lib/media-editor"
+import { NativeSegmentedControl } from "@/src/shared/components/native/native-segmented-control"
+import { GroupedSection } from "@/src/shared/components/native/grouped-section"
+import { ScreenScrollView } from "@/src/shared/components/native/screen-scroll-view"
 import { backendFetch } from "@/src/shared/api/backend"
 import { uploadAssetToBackend } from "@/src/shared/api/upload"
 import { useAppTheme } from "@/src/shared/theme/ThemeProvider"
 import type { MediaEntry, MediaStatusHistory } from "@/src/shared/types/database"
-import type { CleanDataResponse, CleanedMediaEntry, MetadataSearchResponse, MetadataResponse } from "@analytics/contracts"
+import type { CleanDataResponse, CleanedMediaEntry, MetadataResponse } from "@analytics/contracts"
 
 type SortKey = "title" | "rating" | "finish_date"
-type MetadataConflictField =
-  | "title"
-  | "imdbId"
-  | "length"
-  | "averageRating"
-  | "season"
-  | "episodes"
-  | "genre"
-  | "language"
-  | "posterUrl"
-
-interface MediaFormState {
-  title: string
-  status: string
-  medium: string
-  type: string
-  platform: string
-  season: string
-  episodes: string
-  episodesWatched: string
-  myRating: string
-  averageRating: string
-  price: string
-  length: string
-  imdbId: string
-  genre: string
-  language: string
-  startDate: string
-  finishDate: string
-  posterUrl: string
-}
 
 interface SectionShape {
   title: string
@@ -61,43 +60,12 @@ interface SectionShape {
   data: MediaEntry[]
 }
 
-interface MetadataConflict {
-  field: MetadataConflictField
-  label: string
-  current: string
-  incoming: string
-}
-
-interface PendingMetadataSelection {
-  conflictFormPatch: Partial<MediaFormState>
-  conflictEntryPatch: Partial<MediaEntry>
-  conflicts: MetadataConflict[]
-  selections: Record<MetadataConflictField, boolean>
-}
-
 interface ImportSummary {
   success: number
   failed: number
 }
 
-function parseEpisodeHistory(value: unknown): Array<{ episode: number; watched_at: string }> {
-  if (!Array.isArray(value)) return []
-  return value
-    .filter((item) => {
-      if (!item || typeof item !== "object") return false
-      const record = item as { episode?: unknown; watched_at?: unknown }
-      return typeof record.episode === "number" && typeof record.watched_at === "string"
-    })
-    .map((item) => {
-      const record = item as { episode: number; watched_at: string }
-      return { episode: record.episode, watched_at: record.watched_at }
-    })
-}
-
-function toCsvList(value: string[] | null | undefined): string {
-  if (!value || value.length === 0) return ""
-  return value.join(", ")
-}
+type MediaWorkspaceMode = "diary" | "analytics"
 
 function parseCsvList(value: string): string[] | null {
   const parsed = value
@@ -150,29 +118,6 @@ function toCreatePayloadFromCleanedEntry(entry: CleanedMediaEntry): (Partial<Med
   }
 }
 
-function buildFormFromEntry(entry: MediaEntry): MediaFormState {
-  return {
-    title: entry.title,
-    status: entry.status ?? "",
-    medium: entry.medium ?? "",
-    type: entry.type ?? "",
-    platform: entry.platform ?? "",
-    season: entry.season ?? "",
-    episodes: entry.episodes != null ? String(entry.episodes) : "",
-    episodesWatched: entry.episodes_watched != null ? String(entry.episodes_watched) : "",
-    myRating: entry.my_rating != null ? String(entry.my_rating) : "",
-    averageRating: entry.average_rating != null ? String(entry.average_rating) : "",
-    price: entry.price != null ? String(entry.price) : "",
-    length: entry.length ?? "",
-    imdbId: entry.imdb_id ?? "",
-    genre: toCsvList(entry.genre),
-    language: toCsvList(entry.language),
-    startDate: entry.start_date ?? "",
-    finishDate: entry.finish_date ?? "",
-    posterUrl: entry.poster_url ?? ""
-  }
-}
-
 function matchesSearch(entry: MediaEntry, query: string): boolean {
   if (!query) return true
   const lower = query.toLowerCase()
@@ -197,12 +142,6 @@ function formatDate(value: string | null): string {
   return value
 }
 
-function formatDateTime(value: string): string {
-  const date = new Date(value)
-  if (Number.isNaN(date.getTime())) return value
-  return date.toLocaleString("en-US")
-}
-
 function rowSubtitle(entry: MediaEntry): string {
   const pieces = [entry.medium ?? "Unknown", entry.status ?? "-"]
   if (entry.finish_date) pieces.push(`Finished ${entry.finish_date}`)
@@ -223,12 +162,66 @@ function sortEntries(entries: MediaEntry[], sortKey: SortKey, descending: boolea
   return descending ? sorted.reverse() : sorted
 }
 
+function formatShortDate(value: string | null): string {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric"
+  })
+}
+
+function formatRelativeDate(value: string | null): string {
+  if (!value) return "-"
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return "-"
+  const now = new Date()
+  const diffMs = now.getTime() - date.getTime()
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000))
+  if (days <= 0) return "today"
+  if (days === 1) return "1 day ago"
+  if (days < 30) return `${days} days ago`
+  const months = Math.floor(days / 30)
+  return months === 1 ? "1 month ago" : `${months} months ago`
+}
+
+function toMonthDay(value: string | null): { month: string; day: string } {
+  if (!value) return { month: "---", day: "--" }
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return { month: "---", day: "--" }
+  return {
+    month: date.toLocaleDateString("en-US", { month: "short" }).toUpperCase(),
+    day: String(date.getDate()).padStart(2, "0")
+  }
+}
+
+function progressPercent(entry: MediaEntry): number {
+  if (!entry.episodes || entry.episodes <= 0) return 0
+  const watched = entry.episodes_watched ?? 0
+  const ratio = watched / entry.episodes
+  return Math.max(0, Math.min(100, Math.round(ratio * 100)))
+}
+
+function formatRatingStars(value: number | null): string {
+  if (value == null || value <= 0) return "☆☆☆☆☆"
+  const normalized = Math.max(0, Math.min(5, Math.round(value / 2)))
+  const filled = "★".repeat(normalized)
+  const empty = "☆".repeat(5 - normalized)
+  return `${filled}${empty}`
+}
+
 export function MediaScreen() {
+  const router = useRouter()
   const { palette } = useAppTheme()
   const { data, isLoading, error, createEntry, updateEntry, deleteEntry, getStatusHistory, refetch } = useMediaEntries()
 
-  const [title, setTitle] = useState("")
   const [search, setSearch] = useState("")
+  const [workspaceMode, setWorkspaceMode] = useState<MediaWorkspaceMode>("diary")
+  const [overflowOpen, setOverflowOpen] = useState(false)
+  const [importSheetOpen, setImportSheetOpen] = useState(false)
+  const [mediumFilter, setMediumFilter] = useState<string | null>(null)
+  const [genreFilter, setGenreFilter] = useState<string | null>(null)
   const [csvData, setCsvData] = useState("")
   const [importFileName, setImportFileName] = useState<string | null>(null)
   const [cleaningImport, setCleaningImport] = useState(false)
@@ -257,17 +250,14 @@ export function MediaScreen() {
   const [message, setMessage] = useState<string | null>(null)
 
   const [selectedEntry, setSelectedEntry] = useState<MediaEntry | null>(null)
-  const [formState, setFormState] = useState<MediaFormState | null>(null)
+  const [editorTab, setEditorTab] = useState<MediaEditorTab>("general")
+  const [formState, setFormState] = useState<MediaEditorDraft | null>(null)
   const [saving, setSaving] = useState(false)
   const [fetchingMetadata, setFetchingMetadata] = useState(false)
   const [uploadingPoster, setUploadingPoster] = useState(false)
   const [statusHistory, setStatusHistory] = useState<MediaStatusHistory[]>([])
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [episodeDateDrafts, setEpisodeDateDrafts] = useState<Record<number, string>>({})
-
-  const [metadataSearchLoading, setMetadataSearchLoading] = useState(false)
-  const [metadataSearchResults, setMetadataSearchResults] = useState<MetadataSearchResponse["results"]>([])
-  const [pendingMetadata, setPendingMetadata] = useState<PendingMetadataSelection | null>(null)
+  const [pendingMetadata, setPendingMetadata] = useState<PendingMediaMetadataSelection | null>(null)
 
   const [watchThisEntry, setWatchThisEntry] = useState<MediaEntry | null>(null)
   const [watchThisSynopsis, setWatchThisSynopsis] = useState<string>("")
@@ -283,51 +273,46 @@ export function MediaScreen() {
     }
   }, [selectMode])
 
-  useEffect(() => {
-    if (!selectedEntry || !formState?.title.trim()) {
-      setMetadataSearchResults([])
-      return
-    }
-    const query = formState.title.trim()
-    if (query.length < 2) {
-      setMetadataSearchResults([])
-      return
-    }
-
-    const timer = setTimeout(async () => {
-      setMetadataSearchLoading(true)
-      try {
-        const response = await backendFetch<MetadataSearchResponse>(`/api/metadata/search?q=${encodeURIComponent(query)}`)
-        setMetadataSearchResults(response.results ?? [])
-      } catch {
-        setMetadataSearchResults([])
-      } finally {
-        setMetadataSearchLoading(false)
+  useFocusEffect(
+    useCallback(() => {
+      const pendingMessage = consumePendingMediaFlashMessage()
+      if (pendingMessage) {
+        setMessage(pendingMessage)
       }
-    }, 250)
-
-    return () => clearTimeout(timer)
-  }, [selectedEntry?.id, formState?.title])
+      return undefined
+    }, [])
+  )
 
   const sections = useMemo<SectionShape[]>(() => {
-    const filtered = entries.filter((entry) => matchesSearch(entry, search.trim().toLowerCase()))
+    const filtered = entries
+      .filter((entry) => matchesSearch(entry, search.trim().toLowerCase()))
+      .filter((entry) => (mediumFilter ? entry.medium === mediumFilter : true))
+      .filter((entry) => (genreFilter ? (entry.genre ?? []).includes(genreFilter) : true))
     const sorted = sortEntries(filtered, sortKey, sortDescending)
-    const watching = sorted.filter((entry) => statusBucket(entry.status) === "watching")
     const watched = sorted.filter((entry) => statusBucket(entry.status) === "watched")
     const planned = sorted.filter((entry) => statusBucket(entry.status) === "planned")
     const paused = sorted.filter((entry) => statusBucket(entry.status) === "paused")
 
     return [
-      { title: "Currently Watching", key: "watching", data: watching },
       { title: "Watched", key: "watched", data: watched },
       { title: "Planned", key: "planned", data: planned },
       { title: "On Hold / Dropped", key: "paused", data: paused }
     ].filter((section) => section.data.length > 0)
-  }, [entries, search, sortKey, sortDescending])
+  }, [entries, genreFilter, mediumFilter, search, sortKey, sortDescending])
 
   const watchingEntries = useMemo(
     () => sortEntries(entries.filter((entry) => statusBucket(entry.status) === "watching"), sortKey, sortDescending),
     [entries, sortKey, sortDescending]
+  )
+
+  const mediumOptions = useMemo(
+    () => Array.from(new Set(entries.map((entry) => entry.medium).filter((value): value is string => Boolean(value)))).slice(0, 6),
+    [entries]
+  )
+
+  const genreOptions = useMemo(
+    () => Array.from(new Set(entries.flatMap((entry) => entry.genre ?? []))).slice(0, 6),
+    [entries]
   )
 
   async function loadStatusHistory(entryId: string) {
@@ -344,40 +329,22 @@ export function MediaScreen() {
 
   function openEntryDetails(entry: MediaEntry) {
     setSelectedEntry(entry)
-    setFormState(buildFormFromEntry(entry))
-    setEpisodeDateDrafts({})
+    setEditorTab("general")
+    setFormState(buildMediaEditorDraft(entry))
     setPendingMetadata(null)
-    loadStatusHistory(entry.id)
     setMessage(null)
+    loadStatusHistory(entry.id)
   }
 
   function closeEntryDetails() {
     setSelectedEntry(null)
+    setEditorTab("general")
     setFormState(null)
     setFetchingMetadata(false)
     setSaving(false)
     setStatusHistory([])
     setHistoryLoading(false)
-    setEpisodeDateDrafts({})
-    setMetadataSearchResults([])
     setPendingMetadata(null)
-  }
-
-  async function handleAdd() {
-    const next = title.trim()
-    if (!next) return
-    try {
-      await createEntry({
-        title: next,
-        status: "Watching",
-        medium: "Movie",
-        start_date: new Date().toISOString().slice(0, 10)
-      })
-      setTitle("")
-      setMessage("Entry added")
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to add entry")
-    }
   }
 
   async function handleDelete(id: string) {
@@ -586,48 +553,29 @@ export function MediaScreen() {
     }
   }
 
-  async function applyMetadataSelection(selection: PendingMetadataSelection) {
-    if (!selectedEntry || !formState) return
-    const formPatch: Partial<MediaFormState> = {}
-    const entryPatch: Partial<MediaEntry> = {}
-
-    for (const conflict of selection.conflicts) {
-      if (!selection.selections[conflict.field]) continue
-      if (Object.prototype.hasOwnProperty.call(selection.conflictFormPatch, conflict.field)) {
-        ;(formPatch as Record<string, unknown>)[conflict.field] =
-          (selection.conflictFormPatch as Record<string, unknown>)[conflict.field]
-      }
-      const entryKey = mapFieldToEntryKey(conflict.field)
-      if (Object.prototype.hasOwnProperty.call(selection.conflictEntryPatch, entryKey)) {
-        ;(entryPatch as Record<string, unknown>)[entryKey] =
-          (selection.conflictEntryPatch as Record<string, unknown>)[entryKey]
-      }
+  function applyPendingMetadataSelection(selection: PendingMediaMetadataSelection) {
+    if (!formState) return
+    const patch = applyMetadataSelection(selection)
+    if (Object.keys(patch).length > 0) {
+      setFormState((prev) => (prev ? { ...prev, ...patch } : prev))
     }
-
-    setFormState((prev) => (prev ? { ...prev, ...formPatch } : prev))
-    if (Object.keys(entryPatch).length > 0) {
-      await updateEntry({ id: selectedEntry.id, payload: entryPatch })
-      await refetch()
-    }
-
     setPendingMetadata(null)
     setMessage("Metadata applied")
   }
 
-  function mapFieldToEntryKey(field: MetadataConflictField): keyof MediaEntry {
-    if (field === "imdbId") return "imdb_id"
-    if (field === "averageRating") return "average_rating"
-    if (field === "posterUrl") return "poster_url"
-    if (field === "episodes") return "episodes"
-    if (field === "genre") return "genre"
-    if (field === "language") return "language"
-    if (field === "title") return "title"
-    if (field === "length") return "length"
-    return "season"
+  function toggleMetadataField(field: MediaMetadataConflictField) {
+    setPendingMetadata((prev) =>
+      prev
+        ? {
+            ...prev,
+            selections: { ...prev.selections, [field]: !prev.selections[field] }
+          }
+        : prev
+    )
   }
 
   async function fetchMetadataForForm(paramsOverride?: { title?: string; imdb_id?: string }) {
-    if (!selectedEntry || !formState) return
+    if (!formState) return
 
     const titleParam = paramsOverride?.title ?? formState.title.trim()
     const imdbIdParam = paramsOverride?.imdb_id ?? formState.imdbId.trim()
@@ -648,99 +596,17 @@ export function MediaScreen() {
       params.set("source", "tmdb")
 
       const metadata = await backendFetch<Record<string, unknown>>(`/api/metadata?${params.toString()}`)
-      const immediateFormPatch: Partial<MediaFormState> = {}
-      const immediateEntryPatch: Partial<MediaEntry> = {}
-      const conflictFormPatch: Partial<MediaFormState> = {}
-      const conflictEntryPatch: Partial<MediaEntry> = {}
-      const conflicts: MetadataConflict[] = []
-
-      function processField<T extends MetadataConflictField>(
-        field: T,
-        label: string,
-        incomingRaw: unknown,
-        currentFormValue: string,
-        currentEntryValue: unknown,
-        transform: (value: unknown) => { form: string; entry: unknown } | null
-      ) {
-        const transformed = transform(incomingRaw)
-        if (!transformed) return
-        const incomingString = transformed.form
-        if (!incomingString) return
-
-        const currentString = typeof currentFormValue === "string" ? currentFormValue : String(currentEntryValue ?? "")
-        const hasCurrentValue = currentString.trim().length > 0
-        const isConflict = hasCurrentValue && currentString.trim() !== incomingString.trim()
-
-        if (isConflict) {
-          ;(conflictFormPatch as Record<string, unknown>)[field] = transformed.form
-          ;(conflictEntryPatch as Record<string, unknown>)[mapFieldToEntryKey(field)] = transformed.entry as never
-          conflicts.push({ field, label, current: currentString, incoming: incomingString })
-        } else {
-          ;(immediateFormPatch as Record<string, unknown>)[field] = transformed.form
-          ;(immediateEntryPatch as Record<string, unknown>)[mapFieldToEntryKey(field)] = transformed.entry as never
-        }
+      const { immediatePatch, pendingSelection } = buildMetadataSelectionFromDraft(metadata, formState)
+      if (Object.keys(immediatePatch).length > 0) {
+        setFormState((prev) => (prev ? { ...prev, ...immediatePatch } : prev))
       }
 
-      processField("title", "Title", metadata.title, formState.title, selectedEntry.title, (value) =>
-        typeof value === "string" ? { form: value, entry: value } : null
-      )
-      processField("imdbId", "IMDb ID", metadata.imdb_id, formState.imdbId, selectedEntry.imdb_id, (value) =>
-        typeof value === "string" ? { form: value, entry: value } : null
-      )
-      processField("length", "Length", metadata.length, formState.length, selectedEntry.length, (value) =>
-        typeof value === "string" ? { form: value, entry: value } : null
-      )
-      processField("averageRating", "Average Rating", metadata.average_rating, formState.averageRating, selectedEntry.average_rating, (value) =>
-        typeof value === "number" ? { form: String(value), entry: value } : null
-      )
-      processField("season", "Season", metadata.season, formState.season, selectedEntry.season, (value) =>
-        typeof value === "string" ? { form: value, entry: value } : null
-      )
-      processField("episodes", "Episodes", metadata.episodes, formState.episodes, selectedEntry.episodes, (value) =>
-        typeof value === "number" ? { form: String(value), entry: value } : null
-      )
-      processField("genre", "Genre", metadata.genre, formState.genre, selectedEntry.genre, (value) => {
-        if (Array.isArray(value)) {
-          const list = value.filter((item): item is string => typeof item === "string")
-          return { form: list.join(", "), entry: list }
-        }
-        if (typeof value === "string") return { form: value, entry: parseCsvList(value) }
-        return null
-      })
-      processField("language", "Language", metadata.language, formState.language, selectedEntry.language, (value) => {
-        if (Array.isArray(value)) {
-          const list = value.filter((item): item is string => typeof item === "string")
-          return { form: list.join(", "), entry: list }
-        }
-        if (typeof value === "string") return { form: value, entry: parseCsvList(value) }
-        return null
-      })
-      processField("posterUrl", "Poster", metadata.poster_url, formState.posterUrl, selectedEntry.poster_url, (value) =>
-        typeof value === "string" ? { form: value, entry: value } : null
-      )
-
-      setFormState((prev) => (prev ? { ...prev, ...immediateFormPatch } : prev))
-      if (Object.keys(immediateEntryPatch).length > 0) {
-        await updateEntry({ id: selectedEntry.id, payload: immediateEntryPatch })
-      }
-
-      if (conflicts.length > 0) {
-        const selections = conflicts.reduce(
-          (acc, conflict) => ({ ...acc, [conflict.field]: false }),
-          {} as Record<MetadataConflictField, boolean>
-        )
-        setPendingMetadata({
-          conflictFormPatch,
-          conflictEntryPatch,
-          conflicts,
-          selections
-        })
+      if (pendingSelection) {
+        setPendingMetadata(pendingSelection)
         setMessage("Metadata fetched. Review conflicting fields.")
       } else {
         setMessage("Metadata fetched")
       }
-
-      await refetch()
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Failed to fetch metadata")
     } finally {
@@ -749,7 +615,7 @@ export function MediaScreen() {
   }
 
   async function pickAndUploadPoster() {
-    if (!selectedEntry || !formState) return
+    if (!formState) return
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
     if (!permission.granted) {
       setMessage("Photo library permission is required")
@@ -772,12 +638,7 @@ export function MediaScreen() {
         mimeType: asset.mimeType,
         title: formState.title || "poster"
       })
-      await updateEntry({
-        id: selectedEntry.id,
-        payload: { poster_url: uploaded.url }
-      })
       setFormState((prev) => (prev ? { ...prev, posterUrl: uploaded.url } : prev))
-      await refetch()
       setMessage("Poster uploaded")
     } catch (e) {
       setMessage(e instanceof Error ? e.message : "Failed to upload poster")
@@ -788,26 +649,7 @@ export function MediaScreen() {
 
   async function saveEntryDetails() {
     if (!selectedEntry || !formState) return
-    const payload: Partial<MediaEntry> = {
-      title: formState.title.trim(),
-      status: formState.status.trim() || null,
-      medium: formState.medium.trim() || null,
-      type: formState.type.trim() || null,
-      platform: formState.platform.trim() || null,
-      season: formState.season.trim() || null,
-      episodes: toNumberOrNull(formState.episodes),
-      episodes_watched: toNumberOrNull(formState.episodesWatched),
-      my_rating: toNumberOrNull(formState.myRating),
-      average_rating: toNumberOrNull(formState.averageRating),
-      price: toNumberOrNull(formState.price),
-      length: formState.length.trim() || null,
-      imdb_id: formState.imdbId.trim() || null,
-      genre: parseCsvList(formState.genre),
-      language: parseCsvList(formState.language),
-      start_date: formState.startDate.trim() || null,
-      finish_date: formState.finishDate.trim() || null,
-      poster_url: formState.posterUrl.trim() || null
-    }
+    const payload = buildMediaEntryPayloadFromDraft(formState)
     if (!payload.title) {
       setMessage("Title is required")
       return
@@ -839,7 +681,7 @@ export function MediaScreen() {
       id: entry.id,
       payload: {
         episodes_watched: nextEpisode,
-        episode_history: updatedHistory,
+        episode_history: updatedHistory as unknown as MediaEntry["episode_history"],
         last_watched_at: watchedAt,
         status: "Watching"
       }
@@ -847,129 +689,41 @@ export function MediaScreen() {
     await refetch()
   }
 
-  async function markFinishedForEntry(entry: MediaEntry) {
-    const finishDate = new Date().toISOString().slice(0, 10)
-    const payload: Partial<MediaEntry> = {
-      status: "Finished",
-      finish_date: finishDate
-    }
-    if (entry.episodes) payload.episodes_watched = entry.episodes
-    await updateEntry({ id: entry.id, payload })
-    await refetch()
+  function addEpisodeToEditor(episode: number) {
+    setFormState((prev) => (prev ? addEpisodeToDraft(prev, episode) : prev))
+    setMessage(`Logged episode ${episode}`)
   }
 
-  async function markNextEpisode() {
-    if (!selectedEntry || !formState) return
-    try {
-      await markNextEpisodeForEntry(selectedEntry)
-      setMessage("Episode marked watched")
-      const refreshed = entries.find((entry) => entry.id === selectedEntry.id)
-      if (refreshed) openEntryDetails(refreshed)
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to update episode progress")
-    }
-  }
-
-  async function markFinished() {
-    if (!selectedEntry || !formState) return
-    try {
-      await markFinishedForEntry(selectedEntry)
-      setMessage("Entry marked as finished")
-      const refreshed = entries.find((entry) => entry.id === selectedEntry.id)
-      if (refreshed) openEntryDetails(refreshed)
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to mark as finished")
-    }
-  }
-
-  async function handleFinishedToday() {
-    if (!selectedEntry || !formState) return
-    const totalEpisodes = toNumberOrNull(formState.episodes)
-    if (!totalEpisodes) {
-      setMessage("Set total episodes first")
+  function finishTodayInEditor() {
+    if (!formState) return
+    const nextDraft = markFinishedTodayInDraft(formState)
+    if (!nextDraft) {
+      setMessage("Set total episodes first or add remaining episodes before finishing today")
       return
     }
-    const existingHistory = parseEpisodeHistory(selectedEntry.episode_history)
-    const maxEpisode = existingHistory.length > 0 ? Math.max(...existingHistory.map((item) => item.episode)) : 0
-    if (maxEpisode >= totalEpisodes) {
-      setMessage("All episodes already logged")
-      return
-    }
-
-    const watchedAt = new Date().toISOString()
-    const additions: Array<{ episode: number; watched_at: string }> = []
-    for (let episode = maxEpisode + 1; episode <= totalEpisodes; episode += 1) {
-      additions.push({ episode, watched_at: watchedAt })
-    }
-    const nextHistory = [...existingHistory, ...additions]
-
-    try {
-      await updateEntry({
-        id: selectedEntry.id,
-        payload: {
-          episode_history: nextHistory,
-          episodes_watched: totalEpisodes,
-          last_watched_at: watchedAt,
-          status: "Finished",
-          finish_date: new Date().toISOString().slice(0, 10)
-        }
-      })
-      await refetch()
-      const refreshed = entries.find((entry) => entry.id === selectedEntry.id)
-      if (refreshed) openEntryDetails(refreshed)
-      setMessage(`Logged remaining ${additions.length} episodes`)
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to complete episodes")
-    }
+    const additions = nextDraft.episodeHistoryDraft.length - formState.episodeHistoryDraft.length
+    setFormState(nextDraft)
+    setMessage(`Logged remaining ${additions} episode${additions === 1 ? "" : "s"}`)
   }
 
-  async function editEpisodeHistory(index: number) {
-    if (!selectedEntry) return
-    const draftValue = episodeDateDrafts[index]
-    if (!draftValue?.trim()) {
+  function updateEpisodeDateInEditor(index: number, watchedAt: string) {
+    if (!watchedAt.trim()) {
       setMessage("Enter a valid date/time value")
       return
     }
-    const draftDate = new Date(draftValue)
+    const draftDate = new Date(watchedAt)
     if (Number.isNaN(draftDate.getTime())) {
       setMessage("Invalid episode date")
       return
     }
 
-    const existingHistory = parseEpisodeHistory(selectedEntry.episode_history)
-    if (!existingHistory[index]) return
-    const nextHistory = [...existingHistory]
-    nextHistory[index] = { ...nextHistory[index], watched_at: draftDate.toISOString() }
-
-    try {
-      await updateEntry({ id: selectedEntry.id, payload: { episode_history: nextHistory } })
-      setSelectedEntry((prev) => (prev ? { ...prev, episode_history: nextHistory } : prev))
-      setMessage("Episode history updated")
-      await refetch()
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to update episode history")
-    }
+    setFormState((prev) => (prev ? updateEpisodeHistoryDate(prev, index, draftDate.toISOString()) : prev))
+    setMessage("Episode history updated")
   }
 
-  async function deleteEpisodeHistory(index: number) {
-    if (!selectedEntry) return
-    const existingHistory = parseEpisodeHistory(selectedEntry.episode_history)
-    if (!existingHistory[index]) return
-    const nextHistory = existingHistory.filter((_, currentIndex) => currentIndex !== index)
-    const nextEpisodesWatched = nextHistory.length > 0 ? Math.max(...nextHistory.map((item) => item.episode)) : 0
-
-    try {
-      await updateEntry({
-        id: selectedEntry.id,
-        payload: { episode_history: nextHistory, episodes_watched: nextEpisodesWatched }
-      })
-      setSelectedEntry((prev) => (prev ? { ...prev, episode_history: nextHistory, episodes_watched: nextEpisodesWatched } : prev))
-      setFormState((prev) => (prev ? { ...prev, episodesWatched: String(nextEpisodesWatched) } : prev))
-      setMessage("Episode entry removed")
-      await refetch()
-    } catch (e) {
-      setMessage(e instanceof Error ? e.message : "Failed to remove episode entry")
-    }
+  function deleteEpisodeHistoryInEditor(index: number) {
+    setFormState((prev) => (prev ? deleteEpisodeHistoryItem(prev, index) : prev))
+    setMessage("Episode entry removed")
   }
 
   async function batchFetchMetadata(targetIds?: string[]) {
@@ -1160,254 +914,287 @@ export function MediaScreen() {
     })
   }
 
-  const episodeHistory = selectedEntry ? parseEpisodeHistory(selectedEntry.episode_history) : []
+  const totalListedEntries = sections.reduce((sum, section) => sum + section.data.length, 0)
 
   return (
     <SafeAreaView style={[styles.container, { backgroundColor: palette.background }]}>
-      <SectionList
-        sections={sections}
-        keyExtractor={(item) => item.id}
-        stickySectionHeadersEnabled
-        ListHeaderComponent={
-          <View style={styles.header}>
-            <Text style={[styles.title, { color: palette.text }]}>Media Diary</Text>
+      <Stack.Screen
+        options={{
+          title: "Media",
+          headerLargeTitle: true,
+          headerRight: () => (
+            <MediaHeaderActions
+              palette={palette}
+              onOpenAssistant={() => router.push("/ai?workspace=media")}
+              onOpenAdd={() => router.push("/media/add")}
+              onOpenMore={() => setOverflowOpen(true)}
+            />
+          )
+        }}
+      />
+
+      {workspaceMode === "diary" ? (
+        <ScreenScrollView contentContainerStyle={{ gap: 20, paddingBottom: selectMode ? 176 : 40 }}>
+          <NativeSegmentedControl
+            value={workspaceMode}
+            onChange={setWorkspaceMode}
+            options={[
+              { value: "diary", label: "Diary" },
+              { value: "analytics", label: "Analytics" }
+            ]}
+          />
+
+          <View
+            style={[
+              styles.searchCard,
+              {
+                backgroundColor: palette.surface,
+                borderColor: palette.border
+              }
+            ]}
+          >
+            <Ionicons name="search-outline" size={18} color={palette.textMuted} />
             <TextInput
-              style={[styles.input, themedInput(palette)]}
+              style={{ flex: 1, color: palette.text, fontSize: 17 }}
               value={search}
               onChangeText={setSearch}
-              placeholder="Search title, medium, status"
+              placeholder="Search title, status, medium, genre"
               placeholderTextColor={palette.textMuted}
             />
+          </View>
 
-            <View style={styles.addRow}>
-              <TextInput
-                style={[styles.input, themedInput(palette), { flex: 1 }]}
-                value={title}
-                onChangeText={setTitle}
-                placeholder="New media title"
-                placeholderTextColor={palette.textMuted}
-              />
-              <Pressable style={[styles.primaryButton, { backgroundColor: palette.primary }]} onPress={handleAdd}>
-                <Text style={[styles.primaryButtonText, { color: palette.primaryText }]}>Add</Text>
-              </Pressable>
+          {message ? <Text style={{ color: palette.primary, fontSize: 14 }}>{message}</Text> : null}
+          {isLoading ? <ActivityIndicator color={palette.primary} /> : null}
+          {error instanceof Error ? <Text style={{ color: palette.danger, fontSize: 14 }}>{error.message}</Text> : null}
+
+          <View style={{ gap: 12 }}>
+            <MediaFilterStrip
+              allLabel="All Media"
+              label="Media filter"
+              options={mediumOptions}
+              selectedValue={mediumFilter}
+              palette={palette}
+              onSelect={setMediumFilter}
+            />
+            <MediaFilterStrip
+              allLabel="All Genres"
+              label="Genre filter"
+              options={genreOptions}
+              selectedValue={genreFilter}
+              palette={palette}
+              onSelect={setGenreFilter}
+            />
+          </View>
+
+          <MediaWatchingShelf
+            entries={watchingEntries}
+            palette={palette}
+            onOpenEntry={openEntryDetails}
+            onAddEpisode={(entry) => {
+              void markNextEpisodeForEntry(entry)
+            }}
+          />
+
+          {sections.map((section) => (
+            <View key={section.key} style={{ gap: 10 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>
+                <Text selectable style={{ color: palette.text, fontSize: 22, fontWeight: "700", letterSpacing: -0.4 }}>
+                  {section.title}
+                </Text>
+                <Text selectable style={{ color: palette.textMuted, fontSize: 15, fontWeight: "600" }}>
+                  {section.data.length}
+                </Text>
+              </View>
+
+              <GroupedSection>
+                {section.data.map((item, index) => (
+                  <View key={item.id}>
+                    {index > 0 ? <View style={{ height: 1, marginLeft: 134, backgroundColor: palette.border }} /> : null}
+                    <MediaEntryRow
+                      entry={item}
+                      palette={palette}
+                      selected={selectedIds.has(item.id)}
+                      selectMode={selectMode}
+                      onPress={() => (selectMode ? toggleSelected(item.id) : openEntryDetails(item))}
+                    />
+                  </View>
+                ))}
+              </GroupedSection>
             </View>
+          ))}
 
-            <View style={styles.inlineRow}>
-              <Pressable style={[styles.secondaryButton, themedBorder(palette), batchFetching && styles.disabled]} disabled={batchFetching} onPress={() => batchFetchMetadata()}>
-                <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>{batchFetching ? "Fetching..." : "Batch Metadata"}</Text>
-              </Pressable>
-              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={pickRandomPlanned}>
-                <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>Watch This</Text>
-              </Pressable>
-            </View>
+          {!isLoading && totalListedEntries === 0 && watchingEntries.length === 0 ? (
+            <GroupedSection>
+              <View style={{ paddingHorizontal: 18, paddingVertical: 22, gap: 6 }}>
+                <Text selectable style={{ color: palette.text, fontSize: 17, fontWeight: "600" }}>
+                  No entries found
+                </Text>
+                <Text selectable style={{ color: palette.textMuted, fontSize: 14, lineHeight: 20 }}>
+                  Add media from the new + screen or widen the search and filters.
+                </Text>
+              </View>
+            </GroupedSection>
+          ) : null}
+        </ScreenScrollView>
+      ) : (
+        <ScreenScrollView contentContainerStyle={{ gap: 20 }}>
+          <NativeSegmentedControl
+            value={workspaceMode}
+            onChange={setWorkspaceMode}
+            options={[
+              { value: "diary", label: "Diary" },
+              { value: "analytics", label: "Analytics" }
+            ]}
+          />
+          {message ? <Text style={{ color: palette.primary, fontSize: 14 }}>{message}</Text> : null}
+          {error instanceof Error ? <Text style={{ color: palette.danger, fontSize: 14 }}>{error.message}</Text> : null}
+          <MediaAnalyticsPanel entries={entries} />
+        </ScreenScrollView>
+      )}
 
-            <View style={styles.inlineRow}>
-              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => setSelectMode((prev) => !prev)}>
-                <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>{selectMode ? "Done" : "Select Mode"}</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.secondaryButton, themedBorder(palette)]}
-                onPress={() => setSortKey((prev) => (prev === "title" ? "rating" : prev === "rating" ? "finish_date" : "title"))}
-              >
-                <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>Sort: {sortKey}</Text>
-              </Pressable>
-              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => setSortDescending((prev) => !prev)}>
-                <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>{sortDescending ? "Desc" : "Asc"}</Text>
-              </Pressable>
-            </View>
+      <MediaOverflowSheet
+        visible={overflowOpen}
+        selectMode={selectMode}
+        sortDescending={sortDescending}
+        sortKey={sortKey}
+        onClose={() => setOverflowOpen(false)}
+        onPickRandomPlanned={() => {
+          setOverflowOpen(false)
+          pickRandomPlanned()
+        }}
+        onBatchFetchMetadata={() => {
+          setOverflowOpen(false)
+          void batchFetchMetadata()
+        }}
+        onOpenImport={() => {
+          setOverflowOpen(false)
+          setImportSheetOpen(true)
+        }}
+        onToggleSelectMode={() => {
+          setOverflowOpen(false)
+          setSelectMode((prev) => !prev)
+        }}
+        onSetSortKey={(key) => {
+          setSortKey(key)
+          setOverflowOpen(false)
+        }}
+        onToggleSortDirection={() => {
+          setSortDescending((prev) => !prev)
+          setOverflowOpen(false)
+        }}
+      />
 
-            {selectMode && (
-              <View style={styles.batchBlock}>
-                <View style={styles.inlineRow}>
-                  <Pressable style={[styles.secondaryButton, themedBorder(palette), selectedIds.size === 0 && styles.disabled]} onPress={batchSetFinished} disabled={selectedIds.size === 0}>
-                    <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>Batch Finished</Text>
+      {selectMode && workspaceMode === "diary" ? (
+        <MediaSelectionToolbar
+          selectedCount={selectedIds.size}
+          onDone={() => setSelectMode(false)}
+          onBatchEdit={() => setBatchEditOpen(true)}
+          onBatchFetch={() => {
+            void batchFetchMetadata(Array.from(selectedIds))
+          }}
+          onBatchFinish={() => {
+            void batchSetFinished()
+          }}
+          onBatchDelete={() => {
+            void batchDeleteSelected()
+          }}
+        />
+      ) : null}
+
+      <Modal
+        visible={importSheetOpen}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setImportSheetOpen(false)}
+      >
+        <SafeAreaView style={[styles.modalContainer, { backgroundColor: palette.background }]}>
+          <View style={styles.modalHeader}>
+            <Text style={[styles.modalTitle, { color: palette.text }]}>Import Media</Text>
+            <Pressable onPress={() => setImportSheetOpen(false)}>
+              <Text style={[styles.close, { color: palette.primary }]}>Close</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ padding: 16, gap: 16, paddingBottom: 32 }}>
+            <GroupedSection title="Source">
+              <View style={{ padding: 16, gap: 12 }}>
+                <View style={{ flexDirection: "row", gap: 10 }}>
+                  <Pressable style={[styles.sheetButton, themedBorder(palette)]} onPress={pickImportFile}>
+                    <Text style={{ color: palette.text, fontWeight: "700" }}>Pick File</Text>
                   </Pressable>
-                  <Pressable style={[styles.secondaryButton, themedBorder(palette), selectedIds.size === 0 && styles.disabled]} onPress={() => batchFetchMetadata(Array.from(selectedIds))} disabled={selectedIds.size === 0}>
-                    <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>Batch Fetch</Text>
-                  </Pressable>
-                  <Pressable style={[styles.dangerButton, selectedIds.size === 0 && styles.disabled]} onPress={batchDeleteSelected} disabled={selectedIds.size === 0}>
-                    <Text style={styles.dangerButtonText}>Batch Delete</Text>
+                  <Pressable style={[styles.sheetButton, themedBorder(palette)]} onPress={clearImportDraft}>
+                    <Text style={{ color: palette.text, fontWeight: "700" }}>Clear</Text>
                   </Pressable>
                 </View>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette), selectedIds.size === 0 && styles.disabled]} onPress={() => setBatchEditOpen(true)} disabled={selectedIds.size === 0}>
-                  <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>Batch Edit Fields</Text>
-                </Pressable>
-              </View>
-            )}
 
-            {watchingEntries.length > 0 && (
-              <View style={styles.watchingBlock}>
-                <Text style={[styles.blockTitle, { color: palette.text }]}>Watching Now</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
-                  {watchingEntries.map((entry) => (
-                    <View key={entry.id} style={[styles.watchingCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-                      <Text style={[styles.watchingTitle, { color: palette.text }]} numberOfLines={2}>{entry.title}</Text>
-                      <Text style={[styles.watchingMeta, { color: palette.textMuted }]}>
-                        {entry.episodes_watched ?? 0}/{entry.episodes ?? "-"} episodes
-                      </Text>
-                      <View style={styles.inlineRow}>
-                        <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => markNextEpisodeForEntry(entry)}>
-                          <Text style={{ color: palette.text, fontSize: 11 }}>+1 Episode</Text>
-                        </Pressable>
-                        <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => markFinishedForEntry(entry)}>
-                          <Text style={{ color: palette.text, fontSize: 11 }}>Finish</Text>
-                        </Pressable>
-                      </View>
-                      <Pressable style={[styles.primaryButton, { backgroundColor: palette.primary }]} onPress={() => openEntryDetails(entry)}>
-                        <Text style={[styles.primaryButtonText, { color: palette.primaryText }]}>Open</Text>
-                      </Pressable>
-                    </View>
-                  ))}
-                </ScrollView>
-              </View>
-            )}
-
-            <View style={[styles.importCard, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-              <Text style={[styles.blockTitle, { color: palette.text }]}>Import (CSV/TSV/TXT)</Text>
-
-              <View style={styles.inlineRow}>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={pickImportFile}>
-                  <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>Pick File</Text>
-                </Pressable>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={clearImportDraft}>
-                  <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>Clear</Text>
-                </Pressable>
-              </View>
-
-              {importFileName ? <Text style={[styles.metaText, { color: palette.textMuted }]}>Loaded file: {importFileName}</Text> : null}
-
-              <TextInput
-                style={[styles.input, themedInput(palette), styles.csvInput]}
-                value={csvData}
-                onChangeText={(value) => {
-                  setCsvData(value)
-                  setCleanedImportRows([])
-                  setImportSummary(null)
-                }}
-                placeholder="Paste CSV/TSV text here or pick a file"
-                placeholderTextColor={palette.textMuted}
-                multiline
-                textAlignVertical="top"
-              />
-
-              <View style={styles.inlineRow}>
-                <Pressable
-                  style={[styles.secondaryButton, themedBorder(palette), cleaningImport && styles.disabled]}
-                  onPress={cleanImportPreview}
-                  disabled={cleaningImport}
-                >
-                  <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>
-                    {cleaningImport ? "Cleaning..." : "Clean Preview"}
+                {importFileName ? (
+                  <Text selectable style={{ color: palette.textMuted, fontSize: 13 }}>
+                    Loaded file: {importFileName}
                   </Text>
+                ) : null}
+
+                <TextInput
+                  style={[styles.sheetMultilineInput, themedInput(palette)]}
+                  value={csvData}
+                  onChangeText={(value) => {
+                    setCsvData(value)
+                    setCleanedImportRows([])
+                    setImportSummary(null)
+                  }}
+                  placeholder="Paste CSV / TSV text here or import a file"
+                  placeholderTextColor={palette.textMuted}
+                  multiline
+                  textAlignVertical="top"
+                />
+              </View>
+            </GroupedSection>
+
+            <GroupedSection title="Actions" footer={importSummary ? `Imported ${importSummary.success} succeeded, ${importSummary.failed} failed.` : undefined}>
+              <View style={{ padding: 16, gap: 10 }}>
+                <Pressable style={[styles.sheetButton, themedBorder(palette), cleaningImport && styles.disabled]} onPress={cleanImportPreview} disabled={cleaningImport}>
+                  <Text style={{ color: palette.text, fontWeight: "700" }}>{cleaningImport ? "Cleaning..." : "Clean Preview"}</Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.secondaryButton, themedBorder(palette), (enrichingImport || cleanedImportRows.length === 0) && styles.disabled]}
+                  style={[styles.sheetButton, themedBorder(palette), (enrichingImport || cleanedImportRows.length === 0) && styles.disabled]}
                   onPress={enrichCleanedImportRows}
                   disabled={enrichingImport || cleanedImportRows.length === 0}
                 >
-                  <Text style={{ color: palette.text, fontWeight: "700", fontSize: 12 }}>
-                    {enrichingImport
-                      ? `Enriching ${enrichProgress.current}/${enrichProgress.total}`
-                      : "Batch Enrich"}
+                  <Text style={{ color: palette.text, fontWeight: "700" }}>
+                    {enrichingImport ? `Enriching ${enrichProgress.current}/${enrichProgress.total}` : "Batch Enrich"}
                   </Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.primaryButton, { backgroundColor: palette.primary }, (importing || cleanedImportRows.length === 0) && styles.disabled]}
+                  style={[styles.sheetButton, { backgroundColor: palette.primary }, (importing || cleanedImportRows.length === 0) && styles.disabled]}
                   onPress={handleImportCsv}
                   disabled={importing || cleanedImportRows.length === 0}
                 >
-                  <Text style={[styles.primaryButtonText, { color: palette.primaryText, fontSize: 12 }]}>
-                    {importing ? "Importing..." : "Import"}
-                  </Text>
+                  <Text style={{ color: palette.primaryText, fontWeight: "700" }}>{importing ? "Importing..." : "Import Entries"}</Text>
                 </Pressable>
               </View>
+            </GroupedSection>
 
-              {cleanedImportRows.length > 0 ? (
-                <View style={[styles.importPreviewCard, { borderColor: palette.border, backgroundColor: palette.surfaceMuted }]}>
-                  <Text style={[styles.infoSectionTitle, { color: palette.text }]}>
-                    Preview ({Math.min(cleanedImportRows.length, 10)} of {cleanedImportRows.length})
-                  </Text>
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                    <View>
-                      <View style={[styles.previewRow, styles.previewHeader, { borderColor: palette.border }]}>
-                        <Text style={[styles.previewCellTitle, { color: palette.text }]}>Title</Text>
-                        <Text style={[styles.previewCell, { color: palette.text }]}>Medium</Text>
-                        <Text style={[styles.previewCell, { color: palette.text }]}>Status</Text>
-                        <Text style={[styles.previewCell, { color: palette.text }]}>Rating</Text>
-                        <Text style={[styles.previewCell, { color: palette.text }]}>Genre</Text>
-                        <Text style={[styles.previewCell, { color: palette.text }]}>Platform</Text>
-                      </View>
-                      {cleanedImportRows.slice(0, 10).map((row, index) => (
-                        <View key={`${row.title}-${index}`} style={[styles.previewRow, { borderColor: palette.border }]}>
-                          <Text style={[styles.previewCellTitle, { color: palette.text }]} numberOfLines={1}>
-                            {row.title}
-                          </Text>
-                          <Text style={[styles.previewCell, { color: palette.textMuted }]} numberOfLines={1}>{row.medium ?? "-"}</Text>
-                          <Text style={[styles.previewCell, { color: palette.textMuted }]} numberOfLines={1}>{row.status ?? "-"}</Text>
-                          <Text style={[styles.previewCell, { color: palette.textMuted }]} numberOfLines={1}>
-                            {row.my_rating != null ? row.my_rating : "-"}
-                          </Text>
-                          <Text style={[styles.previewCell, { color: palette.textMuted }]} numberOfLines={1}>
-                            {Array.isArray(row.genre) ? row.genre.join(", ") : row.genre ?? "-"}
-                          </Text>
-                          <Text style={[styles.previewCell, { color: palette.textMuted }]} numberOfLines={1}>{row.platform ?? "-"}</Text>
-                        </View>
-                      ))}
+            {cleanedImportRows.length > 0 ? (
+              <GroupedSection title="Preview" footer={`${cleanedImportRows.length} rows ready to import`}>
+                {cleanedImportRows.slice(0, 6).map((row, index) => (
+                  <View key={`${row.title}-${index}`}>
+                    {index > 0 ? <View style={{ height: 1, marginLeft: 16, backgroundColor: palette.border }} /> : null}
+                    <View style={{ paddingHorizontal: 16, paddingVertical: 12, gap: 4 }}>
+                      <Text selectable style={{ color: palette.text, fontSize: 16, fontWeight: "600" }}>
+                        {row.title}
+                      </Text>
+                      <Text selectable style={{ color: palette.textMuted, fontSize: 13 }}>
+                        {[row.medium, row.status, row.platform].filter(Boolean).join(" • ") || "No extra metadata yet"}
+                      </Text>
                     </View>
-                  </ScrollView>
-                  {importSummary ? (
-                    <Text style={[styles.metaText, { color: palette.textMuted }]}>
-                      Results: {importSummary.success} success • {importSummary.failed} failed
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
-            </View>
-
-            {message ? <Text style={[styles.message, { color: palette.primary }]}>{message}</Text> : null}
-            {isLoading ? <ActivityIndicator color={palette.primary} /> : null}
-            {error instanceof Error ? <Text style={[styles.error, { color: palette.danger }]}>{error.message}</Text> : null}
-            {!isLoading && sections.length === 0 ? <Text style={[styles.empty, { color: palette.textMuted }]}>No entries found.</Text> : null}
-          </View>
-        }
-        renderSectionHeader={({ section }) => (
-          <View style={[styles.sectionHeader, { backgroundColor: palette.surfaceMuted }]}>
-            <Text style={[styles.sectionTitle, { color: palette.text }]}>{section.title}</Text>
-            <Text style={[styles.sectionCount, { color: palette.textMuted }]}>{section.data.length}</Text>
-          </View>
-        )}
-        renderItem={({ item }) => (
-          <Pressable
-            style={[
-              styles.row,
-              {
-                backgroundColor: palette.surface,
-                borderColor: selectMode && selectedIds.has(item.id) ? palette.primary : palette.border
-              }
-            ]}
-            onPress={() => (selectMode ? toggleSelected(item.id) : openEntryDetails(item))}
-          >
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.rowTitle, { color: palette.text }]}>{item.title}</Text>
-              <Text style={[styles.rowMeta, { color: palette.textMuted }]}>{rowSubtitle(item)}</Text>
-              <Text style={[styles.rowMeta, { color: palette.textMuted }]}>Start: {formatDate(item.start_date)} • Finish: {formatDate(item.finish_date)}</Text>
-              {selectMode ? (
-                <Text style={{ color: selectedIds.has(item.id) ? palette.primary : palette.textMuted, fontSize: 11, marginTop: 2 }}>
-                  {selectedIds.has(item.id) ? "Selected" : "Tap to select"}
-                </Text>
-              ) : null}
-            </View>
-            {!selectMode ? (
-              <Pressable onPress={() => handleDelete(item.id)}>
-                <Text style={[styles.delete, { color: palette.danger }]}>Delete</Text>
-              </Pressable>
+                  </View>
+                ))}
+              </GroupedSection>
             ) : null}
-          </Pressable>
-        )}
-        contentContainerStyle={{ paddingBottom: 24 }}
-      />
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
 
-      <Modal visible={batchEditOpen} animationType="slide" onRequestClose={() => !batchEditSaving && setBatchEditOpen(false)}>
+      <Modal visible={batchEditOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => !batchEditSaving && setBatchEditOpen(false)}>
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: palette.background }]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: palette.text }]}>Batch Edit ({selectedIds.size})</Text>
@@ -1448,7 +1235,7 @@ export function MediaScreen() {
         </SafeAreaView>
       </Modal>
 
-      <Modal visible={Boolean(selectedEntry && formState)} animationType="slide" onRequestClose={closeEntryDetails}>
+      <Modal visible={Boolean(selectedEntry && formState)} animationType="slide" presentationStyle="pageSheet" onRequestClose={closeEntryDetails}>
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: palette.background }]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: palette.text }]}>Edit Entry</Text>
@@ -1457,210 +1244,48 @@ export function MediaScreen() {
             </Pressable>
           </View>
 
-          {formState && (
-            <ScrollView contentContainerStyle={styles.modalBody}>
-              <View style={[styles.posterBlock, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                {formState.posterUrl ? (
-                  <Image source={{ uri: formState.posterUrl }} style={styles.posterImage} />
-                ) : (
-                  <View style={[styles.posterImage, styles.posterFallback]}>
-                    <Text style={{ color: palette.textMuted }}>No Poster</Text>
-                  </View>
-                )}
-                <View style={{ flex: 1, gap: 8 }}>
-                  <TextInput
-                    style={[styles.input, themedInput(palette)]}
-                    value={formState.posterUrl}
-                    onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, posterUrl: value } : prev))}
-                    placeholder="Poster URL"
-                    placeholderTextColor={palette.textMuted}
-                  />
-                  <Pressable
-                    style={[styles.secondaryButton, themedBorder(palette), uploadingPoster && styles.disabled]}
-                    onPress={pickAndUploadPoster}
-                    disabled={uploadingPoster}
-                  >
-                    <Text style={{ color: palette.text }}>{uploadingPoster ? "Uploading..." : "Upload Poster"}</Text>
-                  </Pressable>
-                </View>
-              </View>
-
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.title} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, title: value } : prev))} placeholder="Title" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.status} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, status: value } : prev))} placeholder="Status" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.medium} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, medium: value } : prev))} placeholder="Medium" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.type} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, type: value } : prev))} placeholder="Type" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.platform} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, platform: value } : prev))} placeholder="Platform" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.imdbId} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, imdbId: value } : prev))} placeholder="IMDb ID" placeholderTextColor={palette.textMuted} />
-
-              {metadataSearchLoading ? <ActivityIndicator color={palette.primary} /> : null}
-              {metadataSearchResults.length > 0 ? (
-                <View style={[styles.searchResults, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                  {metadataSearchResults.slice(0, 5).map((result) => (
-                    <Pressable
-                      key={result.id}
-                      style={styles.searchResultRow}
-                      onPress={() => fetchMetadataForForm({ title: result.title, imdb_id: result.imdb_id })}
-                    >
-                      <Text style={{ color: palette.text, fontWeight: "600" }}>{result.title}</Text>
-                      <Text style={{ color: palette.textMuted, fontSize: 12 }}>{result.year ?? "-"} • {result.media_type.toUpperCase()}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
-
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.genre} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, genre: value } : prev))} placeholder="Genre (comma-separated)" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.language} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, language: value } : prev))} placeholder="Language (comma-separated)" placeholderTextColor={palette.textMuted} />
-
-              <View style={styles.inlineRow}>
-                <TextInput style={[styles.input, themedInput(palette), styles.halfInput]} value={formState.episodes} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, episodes: value } : prev))} placeholder="Episodes" placeholderTextColor={palette.textMuted} keyboardType="numeric" />
-                <TextInput style={[styles.input, themedInput(palette), styles.halfInput]} value={formState.episodesWatched} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, episodesWatched: value } : prev))} placeholder="Episodes Watched" placeholderTextColor={palette.textMuted} keyboardType="numeric" />
-              </View>
-
-              <View style={styles.inlineRow}>
-                <TextInput style={[styles.input, themedInput(palette), styles.halfInput]} value={formState.myRating} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, myRating: value } : prev))} placeholder="My Rating" placeholderTextColor={palette.textMuted} keyboardType="decimal-pad" />
-                <TextInput style={[styles.input, themedInput(palette), styles.halfInput]} value={formState.averageRating} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, averageRating: value } : prev))} placeholder="Avg Rating" placeholderTextColor={palette.textMuted} keyboardType="decimal-pad" />
-              </View>
-
-              <View style={styles.inlineRow}>
-                <TextInput style={[styles.input, themedInput(palette), styles.halfInput]} value={formState.price} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, price: value } : prev))} placeholder="Price" placeholderTextColor={palette.textMuted} keyboardType="decimal-pad" />
-                <TextInput style={[styles.input, themedInput(palette), styles.halfInput]} value={formState.length} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, length: value } : prev))} placeholder="Length" placeholderTextColor={palette.textMuted} />
-              </View>
-
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.season} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, season: value } : prev))} placeholder="Season" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.startDate} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, startDate: value } : prev))} placeholder="Start Date (YYYY-MM-DD)" placeholderTextColor={palette.textMuted} />
-              <TextInput style={[styles.input, themedInput(palette)]} value={formState.finishDate} onChangeText={(value) => setFormState((prev) => (prev ? { ...prev, finishDate: value } : prev))} placeholder="Finish Date (YYYY-MM-DD)" placeholderTextColor={palette.textMuted} />
-
-              <View style={styles.inlineRow}>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette), fetchingMetadata && styles.disabled]} disabled={fetchingMetadata} onPress={() => fetchMetadataForForm()}>
-                  <Text style={{ color: palette.text }}>{fetchingMetadata ? "Fetching..." : "Fetch Metadata"}</Text>
-                </Pressable>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={markNextEpisode}>
-                  <Text style={{ color: palette.text }}>Mark Next Episode</Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.inlineRow}>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={handleFinishedToday}>
-                  <Text style={{ color: palette.text }}>Finished Today</Text>
-                </Pressable>
-                <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={markFinished}>
-                  <Text style={{ color: palette.text }}>Mark Finished</Text>
-                </Pressable>
-                <Pressable style={styles.dangerButton} onPress={() => selectedEntry && handleDelete(selectedEntry.id)}>
-                  <Text style={styles.dangerButtonText}>Delete</Text>
-                </Pressable>
-              </View>
-
-              <View style={[styles.infoSection, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                <Text style={[styles.infoSectionTitle, { color: palette.text }]}>Episode History</Text>
-                {episodeHistory.length === 0 ? (
-                  <Text style={[styles.infoSectionEmpty, { color: palette.textMuted }]}>No episode history yet.</Text>
-                ) : (
-                  episodeHistory
-                    .map((record, originalIndex) => ({ record, originalIndex }))
-                    .sort((left, right) => right.record.episode - left.record.episode)
-                    .map(({ record, originalIndex }) => {
-                      const draftValue = episodeDateDrafts[originalIndex]
-                      const inputValue = draftValue ?? record.watched_at.replace("Z", "").slice(0, 16)
-                      return (
-                        <View key={`${record.episode}-${record.watched_at}-${originalIndex}`} style={[styles.historyRow, { borderColor: palette.border }]}>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styles.historyRowTitle, { color: palette.text }]}>Episode {record.episode}</Text>
-                            <Text style={[styles.historyRowSubtitle, { color: palette.textMuted }]}>{formatDateTime(record.watched_at)}</Text>
-                          </View>
-                          <View style={styles.historyControls}>
-                            <TextInput
-                              style={[styles.input, themedInput(palette), styles.historyInput]}
-                              value={inputValue}
-                              onChangeText={(value) => setEpisodeDateDrafts((prev) => ({ ...prev, [originalIndex]: value }))}
-                              placeholder="YYYY-MM-DDTHH:mm"
-                              placeholderTextColor={palette.textMuted}
-                            />
-                            <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => editEpisodeHistory(originalIndex)}>
-                              <Text style={{ color: palette.text }}>Save</Text>
-                            </Pressable>
-                            <Pressable style={styles.dangerButton} onPress={() => deleteEpisodeHistory(originalIndex)}>
-                              <Text style={styles.dangerButtonText}>Remove</Text>
-                            </Pressable>
-                          </View>
-                        </View>
-                      )
-                    })
-                )}
-              </View>
-
-              <View style={[styles.infoSection, { borderColor: palette.border, backgroundColor: palette.surface }]}>
-                <Text style={[styles.infoSectionTitle, { color: palette.text }]}>Status Timeline</Text>
-                {historyLoading ? (
-                  <ActivityIndicator color={palette.primary} />
-                ) : statusHistory.length === 0 ? (
-                  <Text style={[styles.infoSectionEmpty, { color: palette.textMuted }]}>No status history available.</Text>
-                ) : (
-                  statusHistory.map((historyItem) => (
-                    <View key={historyItem.id} style={[styles.timelineRow, { borderColor: palette.border }]}>
-                      <Text style={[styles.timelineStatus, { color: palette.text }]}>
-                        {historyItem.old_status ?? "None"} {"->"} {historyItem.new_status}
-                      </Text>
-                      <Text style={[styles.timelineDate, { color: palette.textMuted }]}>{formatDateTime(historyItem.changed_at)}</Text>
-                    </View>
-                  ))
-                )}
-              </View>
-
-              <Pressable style={[styles.primaryButton, { backgroundColor: palette.primary }, saving && styles.disabled]} disabled={saving} onPress={saveEntryDetails}>
-                <Text style={[styles.primaryButtonText, { color: palette.primaryText }]}>{saving ? "Saving..." : "Save Changes"}</Text>
-              </Pressable>
-            </ScrollView>
-          )}
+          {formState ? (
+            <MediaEditorContent
+              draft={formState}
+              tab={editorTab}
+              message={message}
+              saving={saving}
+              uploadingPoster={uploadingPoster}
+              fetchingMetadata={fetchingMetadata}
+              historyLoading={historyLoading}
+              isPersisted
+              statusHistory={statusHistory}
+              showDelete={Boolean(selectedEntry)}
+              onTabChange={setEditorTab}
+              onDraftChange={(patch) => {
+                setPendingMetadata(null)
+                setFormState((prev) => (prev ? { ...prev, ...patch } : prev))
+              }}
+              onSave={() => {
+                void saveEntryDetails()
+              }}
+              onDelete={() => selectedEntry && void handleDelete(selectedEntry.id)}
+              onUploadPoster={() => {
+                void pickAndUploadPoster()
+              }}
+              onFetchMetadata={(params) => {
+                void fetchMetadataForForm(params)
+              }}
+              onAddEpisode={addEpisodeToEditor}
+              onFinishedToday={finishTodayInEditor}
+              onUpdateEpisodeDate={updateEpisodeDateInEditor}
+              onDeleteEpisode={deleteEpisodeHistoryInEditor}
+            />
+          ) : null}
         </SafeAreaView>
       </Modal>
 
-      <Modal visible={Boolean(pendingMetadata)} transparent animationType="fade" onRequestClose={() => setPendingMetadata(null)}>
-        <View style={styles.overlay}>
-          <View style={[styles.overrideModal, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Text style={[styles.modalTitle, { color: palette.text }]}>Metadata Override</Text>
-            <Text style={[styles.metaText, { color: palette.textMuted }]}>Select conflicting fields to replace</Text>
-
-            <ScrollView contentContainerStyle={{ gap: 8, paddingVertical: 10, maxHeight: 280 }}>
-              {pendingMetadata?.conflicts.map((conflict) => (
-                <Pressable
-                  key={conflict.field}
-                  style={[styles.overrideRow, { borderColor: palette.border }]}
-                  onPress={() =>
-                    setPendingMetadata((prev) =>
-                      prev
-                        ? {
-                            ...prev,
-                            selections: { ...prev.selections, [conflict.field]: !prev.selections[conflict.field] }
-                          }
-                        : prev
-                    )
-                  }
-                >
-                  <Text style={{ color: palette.text, fontWeight: "700" }}>{conflict.label}</Text>
-                  <Text style={{ color: palette.textMuted, fontSize: 12 }}>Current: {conflict.current}</Text>
-                  <Text style={{ color: palette.textMuted, fontSize: 12 }}>Incoming: {conflict.incoming}</Text>
-                  <Text style={{ color: pendingMetadata.selections[conflict.field] ? palette.primary : palette.textMuted, fontSize: 12 }}>
-                    {pendingMetadata.selections[conflict.field] ? "Will override" : "Keep current"}
-                  </Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-
-            <View style={styles.inlineRow}>
-              <Pressable style={[styles.secondaryButton, themedBorder(palette)]} onPress={() => setPendingMetadata(null)}>
-                <Text style={{ color: palette.text }}>Skip</Text>
-              </Pressable>
-              <Pressable
-                style={[styles.primaryButton, { backgroundColor: palette.primary }]}
-                onPress={() => pendingMetadata && applyMetadataSelection(pendingMetadata)}
-              >
-                <Text style={[styles.primaryButtonText, { color: palette.primaryText }]}>Apply Selected</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <MediaMetadataConflictModal
+        pendingSelection={pendingMetadata}
+        onToggleField={toggleMetadataField}
+        onApply={() => pendingMetadata && applyPendingMetadataSelection(pendingMetadata)}
+        onSkip={() => setPendingMetadata(null)}
+      />
 
       <Modal visible={Boolean(watchThisEntry)} transparent animationType="fade" onRequestClose={() => setWatchThisEntry(null)}>
         <View style={styles.overlay}>
@@ -1715,7 +1340,27 @@ function themedBorder(palette: ReturnType<typeof useAppTheme>["palette"]) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  workspaceShell: { gap: 10, marginBottom: 4 },
+  workspaceAction: {
+    borderWidth: 1,
+    borderRadius: 10,
+    minWidth: 36,
+    minHeight: 34,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  analyticsContent: { padding: 16, gap: 12, paddingBottom: 36 },
   header: { padding: 16, gap: 10 },
+  searchCard: {
+    minHeight: 54,
+    borderWidth: 1,
+    borderRadius: 20,
+    borderCurve: "continuous",
+    paddingHorizontal: 16,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10
+  },
   title: { fontSize: 24, fontWeight: "700" },
   blockTitle: { fontSize: 16, fontWeight: "700" },
   input: {
@@ -1733,7 +1378,34 @@ const styles = StyleSheet.create({
   previewCell: { width: 110, fontSize: 12 },
   addRow: { flexDirection: "row", gap: 8 },
   inlineRow: { flexDirection: "row", gap: 8 },
+  watchedFilterRow: { flexDirection: "row", gap: 8 },
+  searchInput: { flex: 1 },
+  iconSquareButton: {
+    borderWidth: 1,
+    borderRadius: 10,
+    width: 42,
+    alignItems: "center",
+    justifyContent: "center"
+  },
+  filterChipRow: { gap: 8 },
+  filterChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between"
+  },
   batchBlock: { gap: 8 },
+  toolsPanel: {
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: 12,
+    gap: 10
+  },
   primaryButton: {
     borderRadius: 10,
     paddingHorizontal: 18,
@@ -1742,6 +1414,24 @@ const styles = StyleSheet.create({
     alignItems: "center"
   },
   primaryButtonText: { color: "#fff", fontWeight: "700" },
+  sheetButton: {
+    minHeight: 48,
+    borderWidth: 1,
+    borderRadius: 16,
+    borderCurve: "continuous",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 12
+  },
+  sheetMultilineInput: {
+    minHeight: 160,
+    borderWidth: 1,
+    borderRadius: 18,
+    borderCurve: "continuous",
+    paddingHorizontal: 14,
+    paddingVertical: 14
+  },
   secondaryButton: {
     flex: 1,
     borderWidth: 1,
@@ -1770,29 +1460,83 @@ const styles = StyleSheet.create({
   },
   sectionTitle: { fontSize: 14, fontWeight: "700" },
   sectionCount: { fontSize: 12, fontWeight: "700" },
-  row: {
+  listContent: { paddingBottom: 120 },
+  watchedEntryCard: {
     borderWidth: 1,
     borderRadius: 12,
-    padding: 12,
+    padding: 10,
     marginHorizontal: 16,
     marginTop: 8,
     flexDirection: "row",
     alignItems: "center",
     gap: 8
   },
+  dateColumn: { width: 48, alignItems: "center", justifyContent: "center", gap: 1 },
+  dateMonth: { fontSize: 10, fontWeight: "700", letterSpacing: 0.6 },
+  dateDay: { fontSize: 26, fontWeight: "800", lineHeight: 30 },
+  rowPosterThumb: { width: 56, height: 56, borderRadius: 10, backgroundColor: "#e2e8f0" },
   rowTitle: { fontSize: 16, fontWeight: "600" },
   rowMeta: { marginTop: 2, fontSize: 12 },
+  rowTags: { flexDirection: "row", gap: 6, marginTop: 4, flexWrap: "wrap" },
+  rowTag: { fontSize: 11, borderWidth: 1, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2 },
+  moreButton: { width: 28, height: 28, alignItems: "center", justifyContent: "center" },
   delete: { fontWeight: "700" },
   watchingBlock: { gap: 8 },
-  watchingCard: {
-    width: 210,
+  watchingDiaryCard: {
+    width: 320,
     borderWidth: 1,
-    borderRadius: 12,
-    padding: 10,
+    borderRadius: 16,
+    padding: 8,
     gap: 8
   },
-  watchingTitle: { fontSize: 14, fontWeight: "700" },
-  watchingMeta: { fontSize: 12 },
+  watchingPosterShell: {
+    borderRadius: 14,
+    overflow: "hidden",
+    minHeight: 176
+  },
+  watchingPosterImage: {
+    width: "100%",
+    height: 176,
+    backgroundColor: "#0f172a"
+  },
+  watchingTopTags: {
+    position: "absolute",
+    top: 8,
+    left: 8,
+    right: 8,
+    flexDirection: "row",
+    gap: 6,
+    flexWrap: "wrap"
+  },
+  watchingTag: {
+    backgroundColor: "rgba(15, 23, 42, 0.85)",
+    color: "#f8fafc",
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    fontSize: 11,
+    fontWeight: "700"
+  },
+  watchingPosterFooter: {
+    position: "absolute",
+    left: 8,
+    right: 8,
+    bottom: 8,
+    gap: 2
+  },
+  watchingHeroTitle: { color: "#f8fafc", fontSize: 28, lineHeight: 30, fontWeight: "800" },
+  watchingHeroMeta: { color: "#e2e8f0", fontSize: 12 },
+  progressRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 2 },
+  progressLabel: { fontSize: 11, fontWeight: "700" },
+  progressTrack: { height: 8, borderRadius: 999, overflow: "hidden" },
+  progressFill: { height: 8, borderRadius: 999 },
+  watchingCardFooter: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  watchingDateText: { fontSize: 12, fontWeight: "600" },
+  inlineActionButton: {
+    borderRadius: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 9
+  },
   modalContainer: { flex: 1 },
   modalHeader: {
     flexDirection: "row",

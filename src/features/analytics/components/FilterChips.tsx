@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native"
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native"
+import { NativeDateField } from "@/src/shared/components/native/native-date-field"
 import { useAppTheme } from "@/src/shared/theme/ThemeProvider"
 
 export function DateRangeRow({
@@ -15,20 +16,8 @@ export function DateRangeRow({
   const { palette } = useAppTheme()
   return (
     <View style={styles.dateRow}>
-      <TextInput
-        style={[styles.dateInput, { backgroundColor: palette.surface, borderColor: palette.border, color: palette.text }]}
-        value={from}
-        onChangeText={onFromChange}
-        placeholder="From YYYY-MM-DD"
-        placeholderTextColor={palette.textMuted}
-      />
-      <TextInput
-        style={[styles.dateInput, { backgroundColor: palette.surface, borderColor: palette.border, color: palette.text }]}
-        value={to}
-        onChangeText={onToChange}
-        placeholder="To YYYY-MM-DD"
-        placeholderTextColor={palette.textMuted}
-      />
+      <NativeDateField label="From" value={from} onChange={onFromChange} />
+      <NativeDateField label="To" value={to} onChange={onToChange} />
     </View>
   )
 }
@@ -76,14 +65,6 @@ export function MultiSelectChips({
 
 const styles = StyleSheet.create({
   dateRow: { flexDirection: "row", gap: 8 },
-  dateInput: {
-    flex: 1,
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    fontSize: 12
-  },
   block: { gap: 6 },
   label: { fontSize: 11, fontWeight: "700" },
   chipsRow: { gap: 8 },

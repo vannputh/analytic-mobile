@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import {
   ActivityIndicator,
   Modal,
@@ -10,8 +10,12 @@ import {
   View
 } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
+import { Stack, useLocalSearchParams } from "expo-router"
 import { supabase } from "@/src/shared/api/supabase"
 import { backendFetch } from "@/src/shared/api/backend"
+import { GroupedSection } from "@/src/shared/components/native/grouped-section"
+import { NativeSegmentedControl } from "@/src/shared/components/native/native-segmented-control"
+import { ScreenScrollView } from "@/src/shared/components/native/screen-scroll-view"
 import { useAppTheme } from "@/src/shared/theme/ThemeProvider"
 import type {
   AIQueryResponse,
@@ -25,7 +29,10 @@ const STATUS_OPTIONS = ["Watching", "Finished", "On Hold", "Dropped", "Plan to W
 
 export function AIScreen() {
   const { palette } = useAppTheme()
-  const [workspace, setWorkspace] = useState<WorkspaceType>("media")
+  const params = useLocalSearchParams<{ workspace?: WorkspaceType | WorkspaceType[] }>()
+  const workspaceParam = Array.isArray(params.workspace) ? params.workspace[0] : params.workspace
+  const initialWorkspace: WorkspaceType = workspaceParam === "food" ? "food" : "media"
+  const [workspace, setWorkspace] = useState<WorkspaceType>(initialWorkspace)
   const [query, setQuery] = useState("")
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<AIQueryResponse | null>(null)
@@ -39,6 +46,12 @@ export function AIScreen() {
 
   const [editIndex, setEditIndex] = useState<number | null>(null)
   const [editDraft, setEditDraft] = useState<MediaAction["data"] | null>(null)
+
+  useEffect(() => {
+    if (workspaceParam === "media" || workspaceParam === "food") {
+      setWorkspace(workspaceParam)
+    }
+  }, [workspaceParam])
 
   async function submit() {
     setLoading(true)
@@ -150,51 +163,74 @@ export function AIScreen() {
   const selectedCount = useMemo(() => selectedIndexes.size, [selectedIndexes])
 
   return (
-    <SafeAreaView style={[styles.container, { backgroundColor: palette.background }]}>
-      <Text style={[styles.title, { color: palette.text }]}>AI Assistant</Text>
+    <>
+      <Stack.Screen options={{ title: "Assistant", headerLargeTitle: true }} />
 
-      <View style={styles.modeRow}>
-        <ModeButton label="Media" active={workspace === "media"} onPress={() => setWorkspace("media")} palette={palette} />
-        <ModeButton label="Food" active={workspace === "food"} onPress={() => setWorkspace("food")} palette={palette} />
-      </View>
+      <ScreenScrollView contentContainerStyle={{ gap: 20 }}>
+        <GroupedSection title="Workspace">
+          <View style={{ padding: 16, gap: 14 }}>
+            <Text selectable style={[styles.subtitle, { color: palette.textMuted }]}>
+              Ask questions, draft actions, then validate them before anything is applied.
+            </Text>
+            <NativeSegmentedControl
+              value={workspace}
+              onChange={setWorkspace}
+              options={[
+                { value: "media", label: "Media" },
+                { value: "food", label: "Food" }
+              ]}
+            />
+          </View>
+        </GroupedSection>
 
-      <TextInput
-        style={[styles.input, themedInput(palette)]}
-        value={query}
-        onChangeText={setQuery}
-        placeholder="Ask a question or request an action"
-        placeholderTextColor={palette.textMuted}
-        multiline
-      />
+        <GroupedSection title="Ask Assistant">
+          <View style={{ padding: 16, gap: 14 }}>
+            <TextInput
+              style={[styles.input, themedInput(palette)]}
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Ask a question or request an action"
+              placeholderTextColor={palette.textMuted}
+              multiline
+            />
 
-      <Pressable style={[styles.submit, { backgroundColor: palette.primary }]} onPress={submit} disabled={loading || !query.trim()}>
-        {loading ? <ActivityIndicator color={palette.primaryText} /> : <Text style={[styles.submitText, { color: palette.primaryText }]}>Run</Text>}
-      </Pressable>
+            <Pressable style={[styles.submit, { backgroundColor: palette.primary }]} onPress={submit} disabled={loading || !query.trim()}>
+              {loading ? <ActivityIndicator color={palette.primaryText} /> : <Text style={[styles.submitText, { color: palette.primaryText }]}>Run</Text>}
+            </Pressable>
+          </View>
+        </GroupedSection>
 
-      {validating ? (
-        <View style={styles.validatingRow}>
-          <ActivityIndicator color={palette.primary} />
-          <Text style={{ color: palette.textMuted }}>Validating actions...</Text>
-        </View>
-      ) : null}
+        {validating ? (
+          <View style={styles.validatingRow}>
+            <ActivityIndicator color={palette.primary} />
+            <Text selectable style={{ color: palette.textMuted }}>
+              Validating actions...
+            </Text>
+          </View>
+        ) : null}
 
-      {error ? <Text style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
+        {error ? <Text selectable style={[styles.error, { color: palette.danger }]}>{error}</Text> : null}
 
-      <ScrollView style={styles.results} contentContainerStyle={{ paddingBottom: 24 }}>
         {result && result.type !== "action" ? (
           <AIQueryVisualization response={result} palette={palette} />
         ) : result?.type === "action" && Array.isArray(result.actions) ? (
-          <View style={[styles.card, { backgroundColor: palette.surface, borderColor: palette.border }]}>
-            <Text style={[styles.cardTitle, { color: palette.text }]}>{result.intent ?? "Action Plan"}</Text>
-            <Text style={[styles.meta, { color: palette.textMuted }]}>{result.actions.length} actions generated</Text>
-            <Pressable style={[styles.secondaryButton, { borderColor: palette.border }]} onPress={() => setValidationOpen(true)}>
-              <Text style={{ color: palette.text, fontWeight: "700" }}>Review & Execute</Text>
-            </Pressable>
-          </View>
+          <GroupedSection title="Generated Plan">
+            <View style={{ padding: 16, gap: 10 }}>
+              <Text selectable style={[styles.cardTitle, { color: palette.text }]}>{result.intent ?? "Action Plan"}</Text>
+              <Text selectable style={[styles.meta, { color: palette.textMuted }]}>
+                {result.actions.length} actions generated
+              </Text>
+              <Pressable style={[styles.secondaryButton, { borderColor: palette.border }]} onPress={() => setValidationOpen(true)}>
+                <Text selectable style={{ color: palette.text, fontWeight: "700" }}>
+                  Review & Execute
+                </Text>
+              </Pressable>
+            </View>
+          </GroupedSection>
         ) : null}
-      </ScrollView>
+      </ScreenScrollView>
 
-      <Modal visible={validationOpen} animationType="slide" onRequestClose={() => setValidationOpen(false)}>
+      <Modal visible={validationOpen} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setValidationOpen(false)}>
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: palette.background }]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: palette.text }]}>Confirm Actions</Text>
@@ -203,9 +239,8 @@ export function AIScreen() {
             </Pressable>
           </View>
 
-          <Text style={[styles.meta, { color: palette.textMuted }]}>Selected: {selectedCount}</Text>
-
-          <ScrollView contentContainerStyle={{ gap: 8, paddingBottom: 16 }}>
+          <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ gap: 16, padding: 16, paddingBottom: 24 }}>
+            <Text selectable style={[styles.meta, { color: palette.textMuted }]}>Selected: {selectedCount}</Text>
             {validatedActions.map((item, index) => {
               const selected = selectedIndexes.has(index)
               const canSelect = item.validation.valid
@@ -225,15 +260,15 @@ export function AIScreen() {
                     <Text style={[styles.actionType, { color: palette.text }]}>{item.action.type.toUpperCase()}</Text>
                     <Text style={{ color: selected ? palette.primary : palette.textMuted }}>{selected ? "Selected" : "Not selected"}</Text>
                   </View>
-                  <Text style={{ color: palette.text }}>{item.action.data?.title ?? "Untitled action"}</Text>
+                  <Text selectable style={{ color: palette.text }}>{item.action.data?.title ?? "Untitled action"}</Text>
                   {item.matchedEntry ? (
-                    <Text style={[styles.meta, { color: palette.textMuted }]}>Match: {item.matchedEntry.title}</Text>
+                    <Text selectable style={[styles.meta, { color: palette.textMuted }]}>Match: {item.matchedEntry.title}</Text>
                   ) : null}
                   {item.validation.errors.map((msg) => (
-                    <Text key={`error-${msg}`} style={[styles.validationText, { color: palette.danger }]}>Error: {msg}</Text>
+                    <Text key={`error-${msg}`} selectable style={[styles.validationText, { color: palette.danger }]}>Error: {msg}</Text>
                   ))}
                   {item.validation.warnings.map((msg) => (
-                    <Text key={`warn-${msg}`} style={[styles.validationText, { color: "#d97706" }]}>Warning: {msg}</Text>
+                    <Text key={`warn-${msg}`} selectable style={[styles.validationText, { color: "#d97706" }]}>Warning: {msg}</Text>
                   ))}
 
                   {item.action.type === "create" ? (
@@ -247,24 +282,23 @@ export function AIScreen() {
                 </Pressable>
               )
             })}
+            <Pressable
+              style={[
+                styles.submit,
+                {
+                  backgroundColor: selectedCount > 0 ? palette.success : palette.surfaceMuted
+                }
+              ]}
+              onPress={executeActions}
+              disabled={executing || selectedCount === 0}
+            >
+              {executing ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Execute Selected</Text>}
+            </Pressable>
           </ScrollView>
-
-          <Pressable
-            style={[
-              styles.submit,
-              {
-                backgroundColor: selectedCount > 0 ? palette.success : palette.surfaceMuted
-              }
-            ]}
-            onPress={executeActions}
-            disabled={executing || selectedCount === 0}
-          >
-            {executing ? <ActivityIndicator color="#fff" /> : <Text style={styles.submitText}>Execute Selected</Text>}
-          </Pressable>
         </SafeAreaView>
       </Modal>
 
-      <Modal visible={editIndex != null && Boolean(editDraft)} animationType="slide" onRequestClose={() => setEditIndex(null)}>
+      <Modal visible={editIndex != null && Boolean(editDraft)} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditIndex(null)}>
         <SafeAreaView style={[styles.modalContainer, { backgroundColor: palette.background }]}>
           <View style={styles.modalHeader}>
             <Text style={[styles.modalTitle, { color: palette.text }]}>Edit Action</Text>
@@ -274,7 +308,7 @@ export function AIScreen() {
           </View>
 
           {editDraft ? (
-            <ScrollView contentContainerStyle={{ gap: 10, paddingBottom: 24 }}>
+            <ScrollView contentInsetAdjustmentBehavior="automatic" contentContainerStyle={{ gap: 12, padding: 16, paddingBottom: 24 }}>
               <TextInput
                 style={[styles.input, themedInput(palette)]}
                 value={editDraft.title ?? ""}
@@ -322,7 +356,7 @@ export function AIScreen() {
           ) : null}
         </SafeAreaView>
       </Modal>
-    </SafeAreaView>
+    </>
   )
 }
 
@@ -414,33 +448,6 @@ function formatCell(value: unknown) {
   return String(value)
 }
 
-function ModeButton({
-  label,
-  active,
-  onPress,
-  palette
-}: {
-  label: string
-  active: boolean
-  onPress: () => void
-  palette: ReturnType<typeof useAppTheme>["palette"]
-}) {
-  return (
-    <Pressable
-      style={[
-        styles.modeButton,
-        {
-          backgroundColor: active ? palette.primary : palette.surface,
-          borderColor: palette.border
-        }
-      ]}
-      onPress={onPress}
-    >
-      <Text style={{ color: active ? palette.primaryText : palette.text, fontWeight: "700" }}>{label}</Text>
-    </Pressable>
-  )
-}
-
 function themedInput(palette: ReturnType<typeof useAppTheme>["palette"]) {
   return {
     backgroundColor: palette.surface,
@@ -504,9 +511,8 @@ async function validateActions(actions: MediaAction[]): Promise<ValidatedMediaAc
 
 const styles = StyleSheet.create({
   container: { flex: 1, padding: 16, gap: 12 },
-  title: { fontSize: 24, fontWeight: "700" },
-  modeRow: { flexDirection: "row", gap: 8 },
-  modeButton: { flex: 1, borderWidth: 1, borderRadius: 10, paddingVertical: 10, alignItems: "center" },
+  topBlock: { gap: 12 },
+  subtitle: { fontSize: 14, lineHeight: 20 },
   input: {
     borderRadius: 10,
     borderWidth: 1,
